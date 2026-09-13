@@ -1,1917 +1,980 @@
-import json
-import os
-from statistics import mean
-
 import streamlit as st
+import os
+import json
+import re
+import html
+from typing import Dict, Any, List
 
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
-
+# Optional PDF support
 try:
     from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
+    PDF_AVAILABLE = True
+except Exception:
+    PDF_AVAILABLE = False
+
+# Groq
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except Exception:
+    GROQ_AVAILABLE = False
 
 
-# ============================================================
+# =========================================================
 # PAGE CONFIG
-# ============================================================
+# =========================================================
 
 st.set_page_config(
     page_title="AI Interview Simulator",
-    page_icon="🤖",
+    page_icon="🎤",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
 
-# ============================================================
+# =========================================================
 # CONFIG
-# ============================================================
+# =========================================================
 
 MODEL_NAME = "openai/gpt-oss-20b"
 
 
-# ============================================================
-# PREMIUM UI CSS
-# ============================================================
+# =========================================================
+# CUSTOM CSS
+# =========================================================
 
-st.markdown(
-    """
+st.html("""
 <style>
 
-/* =========================================================
-   GLOBAL
-========================================================= */
+    /* ---------- MAIN APP ---------- */
 
-.stApp {
-    background:
-        radial-gradient(
-            circle at 85% 5%,
-            rgba(124, 58, 237, 0.10),
-            transparent 25%
-        ),
-        radial-gradient(
-            circle at 10% 25%,
-            rgba(37, 99, 235, 0.07),
-            transparent 25%
-        ),
-        #080b14;
-    color: #f8fafc;
-}
+    .stApp {
+        background: #f6f8fc;
+    }
 
-.main .block-container {
-    max-width: 1350px;
-    padding-top: 2rem;
-    padding-bottom: 5rem;
-}
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+        max-width: 1250px;
+    }
 
+    /* ---------- SIDEBAR ---------- */
 
-/* =========================================================
-   REMOVE DEFAULT STREAMLIT DECORATION
-========================================================= */
+    section[data-testid="stSidebar"] {
+        background: #111827;
+        border-right: 1px solid #263044;
+    }
 
-#MainMenu {
-    visibility: hidden;
-}
+    section[data-testid="stSidebar"] * {
+        color: #f9fafb !important;
+    }
 
-footer {
-    visibility: hidden;
-}
+    .sidebar-logo {
+        text-align: center;
+        padding: 10px 5px 25px 5px;
+    }
 
-header {
-    background: transparent !important;
-}
+    .sidebar-logo-icon {
+        font-size: 42px;
+    }
 
+    .sidebar-logo-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin-top: 5px;
+    }
 
-/* =========================================================
-   SIDEBAR
-========================================================= */
+    .sidebar-logo-subtitle {
+        font-size: 12px;
+        color: #9ca3af !important;
+        margin-top: 4px;
+    }
 
-section[data-testid="stSidebar"] {
-    background:
-        linear-gradient(
-            180deg,
-            #0b1020 0%,
-            #090d18 100%
-        ) !important;
+    .sidebar-section {
+        color: #9ca3af !important;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 20px 0 10px 0;
+    }
 
-    border-right: 1px solid #1e293b;
-}
+    /* ---------- HERO ---------- */
 
-section[data-testid="stSidebar"] > div {
-    background: transparent !important;
-}
-
-section[data-testid="stSidebar"] * {
-    color: #e5e7eb;
-}
-
-.sidebar-brand {
-    padding: 15px 5px 25px;
-    text-align: center;
-}
-
-.sidebar-logo {
-    width: 62px;
-    height: 62px;
-    margin: auto;
-    border-radius: 18px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    font-size: 31px;
-
-    background:
-        linear-gradient(
+    .hero {
+        background: linear-gradient(
             135deg,
-            #6366f1,
-            #8b5cf6
+            #111827 0%,
+            #1e1b4b 50%,
+            #312e81 100%
         );
-
-    box-shadow:
-        0 12px 35px rgba(99,102,241,0.35);
-}
-
-.sidebar-title {
-    margin-top: 13px;
-    font-size: 20px;
-    font-weight: 800;
-    color: #ffffff;
-}
-
-.sidebar-subtitle {
-    margin-top: 4px;
-    color: #94a3b8;
-    font-size: 12px;
-}
-
-.sidebar-section {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 1.2px;
-    margin: 22px 4px 9px;
-    text-transform: uppercase;
-}
-
-
-/* Sidebar buttons */
-
-section[data-testid="stSidebar"] .stButton > button {
-    width: 100% !important;
-
-    background: transparent !important;
-    color: #cbd5e1 !important;
-
-    border: 1px solid transparent !important;
-    border-radius: 12px !important;
-
-    min-height: 43px !important;
-
-    text-align: left !important;
-
-    padding-left: 15px !important;
-
-    font-size: 14px !important;
-    font-weight: 650 !important;
-
-    transition: 0.2s ease;
-}
-
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #151c2e !important;
-    border-color: #26334d !important;
-    color: #ffffff !important;
-    transform: translateX(2px);
-}
-
-
-/* =========================================================
-   TOP NAV
-========================================================= */
-
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    padding: 4px 2px 25px;
-}
-
-.topbar-title {
-    color: #ffffff;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-
-    padding: 7px 12px;
-
-    border-radius: 30px;
-
-    background: rgba(16,185,129,0.08);
-    border: 1px solid rgba(16,185,129,0.18);
-
-    color: #6ee7b7;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-
-/* =========================================================
-   HERO
-========================================================= */
-
-.hero-container {
-    position: relative;
-    overflow: hidden;
-
-    min-height: 480px;
-
-    border-radius: 30px;
-
-    padding: 60px;
-
-    background:
-        radial-gradient(
-            circle at 78% 35%,
-            rgba(139,92,246,0.38),
-            transparent 28%
-        ),
-        radial-gradient(
-            circle at 100% 100%,
-            rgba(37,99,235,0.25),
-            transparent 30%
-        ),
-        linear-gradient(
-            135deg,
-            #111936 0%,
-            #10152c 48%,
-            #0c1123 100%
-        );
-
-    border: 1px solid #283451;
-
-    box-shadow:
-        0 25px 80px rgba(0,0,0,0.35);
-}
-
-.hero-container::before {
-    content: "";
-    position: absolute;
-
-    width: 330px;
-    height: 330px;
-
-    right: -110px;
-    top: -110px;
-
-    border-radius: 50%;
-
-    border: 1px solid rgba(139,92,246,0.18);
-}
-
-.hero-container::after {
-    content: "";
-    position: absolute;
-
-    width: 230px;
-    height: 230px;
-
-    right: -60px;
-    top: -60px;
-
-    border-radius: 50%;
-
-    border: 1px solid rgba(96,165,250,0.14);
-}
-
-.hero-content {
-    position: relative;
-    z-index: 2;
-    max-width: 700px;
-}
-
-.hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-
-    padding: 8px 14px;
-
-    border-radius: 30px;
-
-    background: rgba(99,102,241,0.12);
-    border: 1px solid rgba(129,140,248,0.28);
-
-    color: #c4b5fd;
-
-    font-size: 11px;
-    font-weight: 800;
-
-    letter-spacing: 0.7px;
-}
-
-.hero-title {
-    margin-top: 24px;
-
-    font-size: 56px;
-    line-height: 1.02;
-
-    font-weight: 900;
-
-    letter-spacing: -2.5px;
-
-    color: #ffffff;
-}
-
-.gradient-text {
-    background:
-        linear-gradient(
-            90deg,
-            #60a5fa,
-            #a78bfa,
-            #c084fc
-        );
-
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.hero-subtitle {
-    margin-top: 20px;
-
-    font-size: 21px;
-    font-weight: 650;
-
-    color: #cbd5e1;
-}
-
-.hero-description {
-    margin-top: 14px;
-
-    max-width: 620px;
-
-    color: #94a3b8;
-
-    font-size: 15px;
-    line-height: 1.75;
-}
-
-
-/* =========================================================
-   HERO AI VISUAL
-========================================================= */
-
-.ai-orb {
-    position: absolute;
-
-    right: 80px;
-    top: 100px;
-
-    width: 190px;
-    height: 190px;
-
-    border-radius: 50%;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    font-size: 75px;
-
-    background:
-        radial-gradient(
-            circle,
-            rgba(139,92,246,0.35),
-            rgba(37,99,235,0.08) 55%,
-            transparent 70%
-        );
-
-    border: 1px solid rgba(139,92,246,0.35);
-
-    box-shadow:
-        0 0 70px rgba(124,58,237,0.25),
-        inset 0 0 45px rgba(99,102,241,0.10);
-}
-
-.ai-orb-ring {
-    position: absolute;
-
-    width: 250px;
-    height: 250px;
-
-    border-radius: 50%;
-
-    border: 1px dashed rgba(129,140,248,0.20);
-}
-
-
-/* =========================================================
-   CTA
-========================================================= */
-
-.cta-wrap .stButton > button {
-    min-height: 55px !important;
-
-    border: 0 !important;
-
-    border-radius: 14px !important;
-
-    background:
-        linear-gradient(
-            135deg,
-            #6366f1,
-            #8b5cf6
-        ) !important;
-
-    color: white !important;
-
-    font-size: 15px !important;
-    font-weight: 800 !important;
-
-    box-shadow:
-        0 12px 35px rgba(99,102,241,0.28);
-
-    transition: 0.2s ease;
-}
-
-.cta-wrap .stButton > button:hover {
-    background:
-        linear-gradient(
-            135deg,
-            #818cf8,
-            #a78bfa
-        ) !important;
-
-    transform: translateY(-2px);
-
-    box-shadow:
-        0 16px 45px rgba(99,102,241,0.38);
-}
-
-
-/* =========================================================
-   SECTION TITLES
-========================================================= */
-
-.section-heading {
-    margin-top: 42px;
-
-    color: #ffffff;
-
-    font-size: 25px;
-    font-weight: 850;
-
-    letter-spacing: -0.5px;
-}
-
-.section-description {
-    color: #64748b;
-
-    font-size: 14px;
-
-    margin-top: 5px;
-    margin-bottom: 22px;
-}
-
-
-/* =========================================================
-   STAT CARDS
-========================================================= */
-
-.stat-card {
-    min-height: 145px;
-
-    padding: 22px;
-
-    border-radius: 18px;
-
-    background:
-        linear-gradient(
-            145deg,
-            rgba(20,27,46,0.98),
-            rgba(12,17,31,0.98)
-        );
-
-    border: 1px solid #202c45;
-
-    box-shadow:
-        0 12px 35px rgba(0,0,0,0.20);
-
-    transition: 0.2s ease;
-}
-
-.stat-card:hover {
-    border-color: #394b72;
-    transform: translateY(-3px);
-}
-
-.stat-icon {
-    font-size: 22px;
-}
-
-.stat-number {
-    margin-top: 12px;
-
-    color: #ffffff;
-
-    font-size: 30px;
-    font-weight: 850;
-}
-
-.stat-label {
-    margin-top: 4px;
-
-    color: #64748b;
-
-    font-size: 12px;
-    font-weight: 700;
-}
-
-
-/* =========================================================
-   FEATURE CARDS
-========================================================= */
-
-.feature-card {
-    min-height: 205px;
-
-    padding: 25px;
-
-    border-radius: 20px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #111827,
-            #0d1321
-        );
-
-    border: 1px solid #202c45;
-
-    box-shadow:
-        0 12px 35px rgba(0,0,0,0.16);
-
-    transition: 0.25s ease;
-}
-
-.feature-card:hover {
-    transform: translateY(-5px);
-
-    border-color: #4c5f8d;
-
-    box-shadow:
-        0 20px 45px rgba(0,0,0,0.28);
-}
-
-.feature-icon {
-    width: 50px;
-    height: 50px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 14px;
-
-    background:
-        rgba(99,102,241,0.12);
-
-    border: 1px solid rgba(99,102,241,0.20);
-
-    font-size: 23px;
-}
-
-.feature-title {
-    margin-top: 17px;
-
-    color: #f8fafc;
-
-    font-size: 17px;
-    font-weight: 800;
-}
-
-.feature-text {
-    margin-top: 8px;
-
-    color: #718096;
-
-    font-size: 13px;
-
-    line-height: 1.65;
-}
-
-
-/* =========================================================
-   STEP CARDS
-========================================================= */
-
-.step-card {
-    padding: 24px;
-
-    min-height: 160px;
-
-    border-radius: 18px;
-
-    background: #0d1321;
-
-    border: 1px solid #202c45;
-}
-
-.step-number {
-    color: #818cf8;
-
-    font-size: 12px;
-
-    font-weight: 900;
-
-    letter-spacing: 1px;
-}
-
-.step-title {
-    color: #ffffff;
-
-    margin-top: 12px;
-
-    font-size: 18px;
-
-    font-weight: 800;
-}
-
-.step-text {
-    color: #64748b;
-
-    margin-top: 7px;
-
-    font-size: 13px;
-
-    line-height: 1.6;
-}
-
-
-/* =========================================================
-   SETUP / INTERVIEW PANELS
-========================================================= */
-
-.dark-panel {
-    padding: 28px;
-
-    border-radius: 22px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #111827,
-            #0c1220
-        );
-
-    border: 1px solid #202c45;
-
-    box-shadow:
-        0 15px 40px rgba(0,0,0,0.18);
-}
-
-.panel-title {
-    color: #ffffff;
-
-    font-size: 19px;
-
-    font-weight: 800;
-}
-
-.panel-subtitle {
-    color: #64748b;
-
-    font-size: 13px;
-
-    margin-top: 4px;
-}
-
-
-/* =========================================================
-   INPUTS
-========================================================= */
-
-div[data-baseweb="select"] > div {
-    background: #111827 !important;
-
-    color: #f8fafc !important;
-
-    border: 1px solid #26334d !important;
-
-    border-radius: 11px !important;
-}
-
-div[data-baseweb="select"] span {
-    color: #e2e8f0 !important;
-}
-
-div[data-testid="stTextInput"] input,
-div[data-testid="stTextArea"] textarea {
-    background: #111827 !important;
-
-    color: #f8fafc !important;
-
-    border: 1px solid #26334d !important;
-
-    border-radius: 11px !important;
-}
-
-div[data-testid="stTextArea"] textarea:focus,
-div[data-testid="stTextInput"] input:focus {
-    border-color: #6366f1 !important;
-}
-
-div[data-testid="stTextArea"] textarea::placeholder,
-div[data-testid="stTextInput"] input::placeholder {
-    color: #475569 !important;
-}
-
-
-/* Labels */
-
-.stSelectbox label,
-.stTextInput label,
-.stTextArea label,
-.stFileUploader label {
-    color: #cbd5e1 !important;
-
-    font-size: 13px !important;
-
-    font-weight: 700 !important;
-}
-
-
-/* =========================================================
-   NORMAL BUTTONS
-========================================================= */
-
-.stButton > button {
-    min-height: 46px !important;
-
-    border-radius: 11px !important;
-
-    background: #111827 !important;
-
-    color: #cbd5e1 !important;
-
-    border: 1px solid #26334d !important;
-
-    font-weight: 700 !important;
-
-    transition: 0.2s ease;
-}
-
-.stButton > button:hover {
-    background: #172033 !important;
-
-    border-color: #6366f1 !important;
-
-    color: #ffffff !important;
-}
-
-
-/* =========================================================
-   PROGRESS
-========================================================= */
-
-div[data-testid="stProgress"] > div {
-    background: #1e293b !important;
-}
-
-div[data-testid="stProgress"] > div > div {
-    background:
-        linear-gradient(
-            90deg,
-            #6366f1,
-            #8b5cf6
-        ) !important;
-}
-
-
-/* =========================================================
-   INTERVIEW QUESTION
-========================================================= */
-
-.question-panel {
-    padding: 30px;
-
-    margin-top: 20px;
-
-    border-radius: 22px;
-
-    background:
-        radial-gradient(
-            circle at 90% 10%,
-            rgba(99,102,241,0.10),
-            transparent 30%
-        ),
-        #0d1321;
-
-    border: 1px solid #26334d;
-
-    box-shadow:
-        0 15px 45px rgba(0,0,0,0.22);
-}
-
-.ai-label {
-    display: inline-block;
-
-    padding: 7px 12px;
-
-    border-radius: 30px;
-
-    background: rgba(99,102,241,0.12);
-
-    border: 1px solid rgba(99,102,241,0.25);
-
-    color: #a5b4fc;
-
-    font-size: 11px;
-
-    font-weight: 850;
-
-    letter-spacing: 0.5px;
-}
-
-.question-number {
-    margin-top: 20px;
-
-    color: #64748b;
-
-    font-size: 11px;
-
-    font-weight: 800;
-
-    letter-spacing: 1px;
-}
-
-.question-text {
-    margin-top: 10px;
-
-    color: #f8fafc;
-
-    font-size: 23px;
-
-    line-height: 1.55;
-
-    font-weight: 700;
-}
-
-
-/* =========================================================
-   RESULTS
-========================================================= */
-
-.score-panel {
-    text-align: center;
-
-    padding: 48px 25px;
-
-    border-radius: 26px;
-
-    background:
-        radial-gradient(
-            circle at center,
-            rgba(99,102,241,0.20),
-            transparent 55%
-        ),
-        #0d1321;
-
-    border: 1px solid #293755;
-
-    box-shadow:
-        0 20px 60px rgba(0,0,0,0.25);
-}
-
-.big-score {
-    color: #ffffff;
-
-    font-size: 72px;
-
-    line-height: 1;
-
-    font-weight: 900;
-
-    letter-spacing: -3px;
-}
-
-.performance {
-    margin-top: 12px;
-
-    color: #a5b4fc;
-
-    font-size: 22px;
-
-    font-weight: 850;
-}
-
-.performance-text {
-    margin-top: 8px;
-
-    color: #64748b;
-
-    font-size: 14px;
-}
-
-
-/* =========================================================
-   RESULT METRICS
-========================================================= */
-
-.result-metric {
-    padding: 20px;
-
-    border-radius: 16px;
-
-    background: #111827;
-
-    border: 1px solid #202c45;
-
-    text-align: center;
-}
-
-.result-value {
-    color: #ffffff;
-
-    font-size: 25px;
-
-    font-weight: 850;
-}
-
-.result-label {
-    margin-top: 5px;
-
-    color: #64748b;
-
-    font-size: 11px;
-
-    font-weight: 750;
-}
-
-
-/* =========================================================
-   EXPANDERS
-========================================================= */
-
-.streamlit-expanderHeader {
-    background: #111827 !important;
-
-    color: #e2e8f0 !important;
-
-    border-radius: 12px !important;
-}
-
-
-/* =========================================================
-   ALERTS
-========================================================= */
-
-div[data-testid="stAlert"] {
-    border-radius: 12px !important;
-}
-
-
-/* =========================================================
-   FOOTER
-========================================================= */
-
-.footer {
-    margin-top: 60px;
-
-    padding: 25px;
-
-    text-align: center;
-
-    color: #475569;
-
-    font-size: 12px;
-
-    border-top: 1px solid #172033;
-}
-
-
-/* =========================================================
-   MOBILE
-========================================================= */
-
-@media (max-width: 900px) {
-
-    .hero-container {
-        padding: 35px 25px;
-        min-height: auto;
+        border-radius: 24px;
+        padding: 35px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 15px 40px rgba(49, 46, 129, 0.18);
+    }
+
+    .hero-badge {
+        display: inline-block;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.18);
+        padding: 7px 14px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 14px;
     }
 
     .hero-title {
-        font-size: 39px;
+        font-size: 38px;
+        font-weight: 800;
+        margin: 0;
+        line-height: 1.15;
     }
 
-    .ai-orb {
-        display: none;
+    .hero-subtitle {
+        font-size: 18px;
+        color: #c7d2fe !important;
+        margin-top: 12px;
     }
 
-}
+    .hero-description {
+        font-size: 14px;
+        color: #d1d5db !important;
+        max-width: 760px;
+        line-height: 1.7;
+        margin-top: 12px;
+    }
+
+    /* ---------- CARDS ---------- */
+
+    .card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 24px;
+        margin-bottom: 18px;
+        box-shadow: 0 5px 20px rgba(15,23,42,0.05);
+    }
+
+    .card-title {
+        color: #111827 !important;
+        font-size: 20px;
+        font-weight: 800;
+        margin-bottom: 6px;
+    }
+
+    .card-subtitle {
+        color: #6b7280 !important;
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+
+    /* ---------- STAT CARDS ---------- */
+
+    .stat-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 22px;
+        min-height: 125px;
+        box-shadow: 0 5px 20px rgba(15,23,42,0.05);
+    }
+
+    .stat-icon {
+        font-size: 25px;
+        margin-bottom: 8px;
+    }
+
+    .stat-value {
+        font-size: 28px;
+        font-weight: 800;
+        color: #111827 !important;
+    }
+
+    .stat-label {
+        font-size: 13px;
+        color: #6b7280 !important;
+        margin-top: 3px;
+    }
+
+    /* ---------- INTERVIEW ---------- */
+
+    .interview-header {
+        margin-bottom: 18px;
+    }
+
+    .interview-title {
+        color: #111827 !important;
+        font-size: 32px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .interview-subtitle {
+        color: #6b7280 !important;
+        margin-top: 5px;
+    }
+
+    .question-panel {
+        background: #191c24;
+        border-radius: 18px;
+        padding: 28px;
+        margin-top: 20px;
+        color: white !important;
+        box-shadow: 0 12px 30px rgba(15,23,42,0.15);
+    }
+
+    .ai-badge {
+        display: inline-block;
+        background: #312e81;
+        color: #c7d2fe !important;
+        padding: 7px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        margin-bottom: 15px;
+    }
+
+    .question-number {
+        color: #a5b4fc !important;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }
+
+    .question-text {
+        color: white !important;
+        font-size: 21px;
+        font-weight: 650;
+        line-height: 1.6;
+    }
+
+    /* ---------- RESULT ---------- */
+
+    .score-card {
+        background: linear-gradient(
+            135deg,
+            #111827,
+            #312e81
+        );
+        border-radius: 22px;
+        padding: 35px;
+        color: white !important;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .score-number {
+        font-size: 62px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .score-label {
+        color: #c7d2fe !important;
+        font-size: 14px;
+        margin-top: 8px;
+    }
+
+    .result-badge {
+        display: inline-block;
+        margin-top: 15px;
+        padding: 8px 18px;
+        background: rgba(255,255,255,0.12);
+        border-radius: 30px;
+        font-weight: 700;
+    }
+
+    .result-section {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 24px;
+        margin-bottom: 18px;
+    }
+
+    .result-heading {
+        color: #111827 !important;
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 12px;
+    }
+
+    .list-item {
+        color: #374151 !important;
+        font-size: 14px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    /* ---------- INFO ---------- */
+
+    .info-box {
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        border-radius: 15px;
+        padding: 16px;
+        color: #312e81 !important;
+        font-size: 13px;
+        line-height: 1.6;
+        margin-bottom: 18px;
+    }
+
+    .success-box {
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 15px;
+        padding: 16px;
+        color: #065f46 !important;
+        font-size: 13px;
+        margin-bottom: 18px;
+    }
+
+    .warning-box {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 15px;
+        padding: 16px;
+        color: #92400e !important;
+        font-size: 13px;
+        margin-bottom: 18px;
+    }
+
+    /* ---------- FOOTER ---------- */
+
+    .footer {
+        text-align: center;
+        color: #9ca3af !important;
+        font-size: 12px;
+        padding: 30px 0 10px 0;
+    }
 
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""")
 
 
-# ============================================================
+# =========================================================
 # SESSION STATE
-# ============================================================
+# =========================================================
 
 defaults = {
-    "page": "Home",
+    "page": "Dashboard",
+    "interview_started": False,
     "questions": [],
+    "current_question": 0,
     "answers": [],
     "evaluations": [],
-    "scores": [],
-    "current_question": 0,
-    "interview_started": False,
-    "interview_finished": False,
-    "interview_config": {},
-    "interview_count": 0,
-    "result_counted": False,
+    "final_report": None,
+    "history": [],
+    "job_role": "Software Engineer",
+    "interview_type": "Technical",
+    "difficulty": "Intermediate",
+    "num_questions": 5,
+    "experience": "Fresher",
     "resume_text": "",
     "resume_name": "",
-    "history": [],
+    "resume_mode": False,
+    "last_error": ""
 }
 
 for key, value in defaults.items():
-
     if key not in st.session_state:
-
         st.session_state[key] = value
 
 
-# ============================================================
+# =========================================================
 # GROQ CLIENT
-# ============================================================
+# =========================================================
 
-def get_groq_client():
-
-    if Groq is None:
-
-        st.error(
-            "Groq package is not installed."
-        )
-
-        return None
-
-    api_key = None
+def get_api_key():
+    """Get Groq API key from Streamlit Secrets or environment."""
 
     try:
-
-        api_key = st.secrets.get(
-            "GROQ_API_KEY"
-        )
-
+        if "GROQ_API_KEY" in st.secrets:
+            return st.secrets["GROQ_API_KEY"]
     except Exception:
-
         pass
 
+    return os.environ.get("GROQ_API_KEY", "")
+
+
+def get_client():
+    if not GROQ_AVAILABLE:
+        return None
+
+    api_key = get_api_key()
+
     if not api_key:
-
-        api_key = os.environ.get(
-            "GROQ_API_KEY"
-        )
-
-    if not api_key:
-
         return None
 
     try:
-
-        return Groq(
-            api_key=api_key
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Could not initialize Groq: {e}"
-        )
-
+        return Groq(api_key=api_key)
+    except Exception:
         return None
 
 
-# ============================================================
-# RESUME EXTRACTION
-# ============================================================
+# =========================================================
+# AI HELPER
+# =========================================================
 
-def extract_resume_text(uploaded_file):
+def call_groq(prompt: str, temperature: float = 0.5) -> str:
 
-    if PdfReader is None:
-
-        st.error(
-            "PyPDF2 is not installed."
-        )
-
-        return ""
-
-    if uploaded_file is None:
-
-        return ""
-
-    try:
-
-        reader = PdfReader(
-            uploaded_file
-        )
-
-        text = ""
-
-        for page in reader.pages:
-
-            text += (
-                page.extract_text() or ""
-            ) + "\n"
-
-        text = text.strip()
-
-        if not text:
-
-            st.warning(
-                "No readable text was found in this PDF."
-            )
-
-            return ""
-
-        return text
-
-    except Exception as e:
-
-        st.error(
-            f"Could not read resume: {e}"
-        )
-
-        return ""
-
-
-# ============================================================
-# GENERATE QUESTION
-# ============================================================
-
-def generate_question():
-
-    client = get_groq_client()
+    client = get_client()
 
     if client is None:
+        return ""
 
-        st.error(
-            "⚠️ Groq API key is missing. "
-            "Please configure GROQ_API_KEY."
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a professional AI interview assistant. "
+                        "Give accurate, concise, practical responses."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=temperature,
+            max_tokens=1200
         )
 
-        return None
+        return response.choices[0].message.content.strip()
 
-    config = st.session_state.interview_config
+    except Exception as e:
+        st.session_state.last_error = str(e)
+        return ""
 
-    role = config.get(
-        "job_role",
-        "Software Engineer"
+
+# =========================================================
+# QUESTION GENERATION
+# =========================================================
+
+def generate_question(
+    role: str,
+    interview_type: str,
+    difficulty: str,
+    experience: str,
+    previous_questions: List[str] = None
+) -> str:
+
+    previous_questions = previous_questions or []
+
+    previous_text = "\n".join(
+        f"- {q}" for q in previous_questions[-5:]
     )
-
-    interview_type = config.get(
-        "interview_type",
-        "Technical Interview"
-    )
-
-    difficulty = config.get(
-        "difficulty",
-        "Intermediate"
-    )
-
-    experience = config.get(
-        "experience",
-        "Fresher"
-    )
-
-    previous = "\n".join(
-        st.session_state.questions[-5:]
-    )
-
-    resume = st.session_state.get(
-        "resume_text",
-        ""
-    )[:5000]
 
     prompt = f"""
-You are a professional interviewer.
-
-Generate ONE realistic interview question.
+Create ONE interview question.
 
 Job Role: {role}
 Interview Type: {interview_type}
 Difficulty: {difficulty}
-Experience: {experience}
+Experience Level: {experience}
 
-Previous Questions:
-{previous if previous else "None"}
+Previous questions:
+{previous_text}
 
-Resume:
-{resume if resume else "No resume provided"}
-
-Rules:
-- Generate exactly ONE question.
+Requirements:
+- Ask only ONE question.
+- Make it relevant to the selected role.
 - Do not repeat previous questions.
-- Match the selected role.
-- Match the interview type.
-- Match the difficulty.
-- Be realistic.
-- Be appropriate for the candidate experience.
-- Keep the question concise.
+- Make it suitable for a real interview.
 - Return ONLY the question.
+- Do NOT add labels such as "Question:".
+- Do NOT add explanations.
+- Do NOT use Markdown.
+- Do NOT use code fences.
+- Do NOT return Python, SQL, JavaScript, HTML, CSS, or any code snippet.
+- Plain text only.
 """
 
-    try:
+    result = call_groq(prompt, temperature=0.7)
 
-        response = client.chat.completions.create(
+    if result:
+        result = re.sub(r"```[a-zA-Z0-9_+-]*", "", result)
+        result = result.replace("```", "")
+        result = result.replace("Question:", "").strip()
 
-            model=MODEL_NAME,
+        return result
 
-            messages=[
-                {
-                    "role": "system",
-                    "content":
-                        "You are an expert interviewer. "
-                        "Return exactly one question.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
+    # Fallback questions
+    fallback = {
+        "Software Engineer":
+            "What is the difference between a process and a thread?",
+        "Python Developer":
+            "What are the main advantages of using Python for software development?",
+        "AI Engineer":
+            "What is the difference between machine learning and deep learning?",
+        "Machine Learning Engineer":
+            "What is overfitting, and how can you reduce it?",
+        "Data Scientist":
+            "How would you handle missing values in a dataset?",
+        "Data Analyst":
+            "What is the difference between correlation and causation?",
+        "Web Developer":
+            "What is the difference between frontend and backend development?",
+        "Frontend Developer":
+            "What is the purpose of responsive web design?",
+        "Backend Developer":
+            "What is an API and why is it useful?",
+        "Cybersecurity Analyst":
+            "What is phishing and how can organizations reduce the risk?",
+        "Computer Science Student":
+            "What programming language are you most comfortable with and why?"
+    }
 
-            temperature=0.7,
-
-            max_tokens=300,
-        )
-
-        result = (
-            response
-            .choices[0]
-            .message
-            .content
-            .strip()
-        )
-
-        return result if result else None
-
-    except Exception as e:
-
-        st.error(
-            f"⚠️ Error generating question: {e}"
-        )
-
-        return None
-
-
-# ============================================================
-# EVALUATE ANSWER
-# ============================================================
-
-def evaluate_answer(question, answer):
-
-    client = get_groq_client()
-
-    if client is None:
-
-        st.error(
-            "⚠️ Groq API key is missing."
-        )
-
-        return None
-
-    config = st.session_state.interview_config
-
-    role = config.get(
-        "job_role",
-        "Software Engineer"
+    return fallback.get(
+        role,
+        "Tell me about yourself and your technical background."
     )
 
-    interview_type = config.get(
-        "interview_type",
-        "Technical Interview"
-    )
 
-    difficulty = config.get(
-        "difficulty",
-        "Intermediate"
-    )
+# =========================================================
+# ANSWER EVALUATION
+# =========================================================
+
+def evaluate_answer(question: str, answer: str) -> Dict[str, Any]:
 
     prompt = f"""
-Evaluate the candidate's interview answer.
+Evaluate this interview answer.
 
-Role: {role}
-Interview Type: {interview_type}
-Difficulty: {difficulty}
-
-Question:
+QUESTION:
 {question}
 
-Candidate Answer:
+CANDIDATE ANSWER:
 {answer}
 
-Return ONLY valid JSON using exactly this structure:
+Return ONLY valid JSON.
+
+Use exactly this structure:
 
 {{
-    "score": 8,
-    "correctness": 8,
-    "relevance": 9,
-    "technical_knowledge": 7,
-    "communication": 8,
-    "confidence": 8,
-    "strengths": [
-        "Strength"
-    ],
-    "improvements": [
-        "Improvement"
-    ],
-    "better_answer": "A stronger example answer.",
-    "concepts_to_review": [
-        "Concept"
-    ]
+  "score": 8,
+  "correctness": 8,
+  "relevance": 9,
+  "technical_knowledge": 7,
+  "communication": 8,
+  "confidence": 8,
+  "completeness": 7,
+  "strengths": [
+    "strength 1",
+    "strength 2"
+  ],
+  "improvements": [
+    "improvement 1",
+    "improvement 2"
+  ],
+  "better_answer": "A concise improved answer",
+  "concepts_to_review": [
+    "concept 1",
+    "concept 2"
+  ]
 }}
 
-Scores must be between 0 and 10.
+Scoring:
+0 = very poor
+10 = excellent
 
-Be fair to a fresher.
+Do not use Markdown.
+Do not put JSON inside a code block.
 """
 
-    try:
+    result = call_groq(prompt, temperature=0.2)
 
-        response = client.chat.completions.create(
+    if result:
 
-            model=MODEL_NAME,
+        try:
+            result = re.sub(r"```json", "", result, flags=re.IGNORECASE)
+            result = result.replace("```", "").strip()
 
-            messages=[
-                {
-                    "role": "system",
-                    "content":
-                        "You are an expert interview evaluator. "
-                        "Return only valid JSON.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
+            match = re.search(r"\{.*\}", result, re.DOTALL)
 
-            temperature=0.2,
+            if match:
+                data = json.loads(match.group())
 
-            max_tokens=1200,
-        )
-
-        result = (
-            response
-            .choices[0]
-            .message
-            .content
-            .strip()
-        )
-
-        if result.startswith("```"):
-
-            result = result.replace(
-                "```json",
-                ""
-            )
-
-            result = result.replace(
-                "```",
-                ""
-            )
-
-            result = result.strip()
-
-        evaluation = json.loads(
-            result
-        )
-
-        numeric_fields = [
-            "score",
-            "correctness",
-            "relevance",
-            "technical_knowledge",
-            "communication",
-            "confidence",
-        ]
-
-        for field in numeric_fields:
-
-            try:
-
-                value = int(
-                    float(
-                        evaluation.get(
-                            field,
-                            0
-                        )
+                return {
+                    "score": int(data.get("score", 5)),
+                    "correctness": int(data.get("correctness", 5)),
+                    "relevance": int(data.get("relevance", 5)),
+                    "technical_knowledge": int(
+                        data.get("technical_knowledge", 5)
+                    ),
+                    "communication": int(
+                        data.get("communication", 5)
+                    ),
+                    "confidence": int(
+                        data.get("confidence", 5)
+                    ),
+                    "completeness": int(
+                        data.get("completeness", 5)
+                    ),
+                    "strengths": data.get("strengths", []),
+                    "improvements": data.get("improvements", []),
+                    "better_answer": data.get(
+                        "better_answer",
+                        "Try to provide a more structured and specific answer."
+                    ),
+                    "concepts_to_review": data.get(
+                        "concepts_to_review",
+                        []
                     )
-                )
+                }
 
-                evaluation[field] = max(
-                    0,
-                    min(
-                        10,
-                        value
-                    )
-                )
+        except Exception:
+            pass
 
-            except Exception:
-
-                evaluation[field] = 0
-
-        for field in [
-            "strengths",
-            "improvements",
-            "concepts_to_review",
-        ]:
-
-            if not isinstance(
-                evaluation.get(field),
-                list
-            ):
-
-                evaluation[field] = []
-
-        return evaluation
-
-    except json.JSONDecodeError:
-
-        st.error(
-            "⚠️ AI returned invalid JSON."
-        )
-
-        return None
-
-    except Exception as e:
-
-        st.error(
-            f"⚠️ Evaluation error: {e}"
-        )
-
-        return None
-
-
-# ============================================================
-# FINAL REPORT
-# ============================================================
-
-def generate_final_report():
-
-    evaluations = (
-        st.session_state.evaluations
-    )
-
-    if not evaluations:
-
-        return {
-            "overall_score": 0,
-            "technical": 0,
-            "communication": 0,
-            "problem_solving": 0,
-            "relevance": 0,
-            "confidence": 0,
-        }
-
-    overall = mean(
-        e.get(
-            "score",
-            0
-        )
-        for e in evaluations
-    )
-
-    technical = mean(
-        e.get(
-            "technical_knowledge",
-            0
-        )
-        for e in evaluations
-    )
-
-    communication = mean(
-        e.get(
-            "communication",
-            0
-        )
-        for e in evaluations
-    )
-
-    relevance = mean(
-        e.get(
-            "relevance",
-            0
-        )
-        for e in evaluations
-    )
-
-    confidence = mean(
-        e.get(
-            "confidence",
-            0
-        )
-        for e in evaluations
-    )
-
-    problem_solving = mean(
-        e.get(
-            "correctness",
-            0
-        )
-        for e in evaluations
-    )
+    # Fallback evaluation
+    length_score = min(10, max(3, len(answer.split()) // 8))
 
     return {
-        "overall_score":
-            round(
-                overall * 10
-            ),
-
-        "technical":
-            round(
-                technical,
-                1
-            ),
-
-        "communication":
-            round(
-                communication,
-                1
-            ),
-
-        "problem_solving":
-            round(
-                problem_solving,
-                1
-            ),
-
-        "relevance":
-            round(
-                relevance,
-                1
-            ),
-
-        "confidence":
-            round(
-                confidence,
-                1
-            ),
+        "score": length_score,
+        "correctness": length_score,
+        "relevance": min(10, length_score + 1),
+        "technical_knowledge": length_score,
+        "communication": length_score,
+        "confidence": length_score,
+        "completeness": length_score,
+        "strengths": [
+            "You attempted the question.",
+            "Your answer communicates your basic understanding."
+        ],
+        "improvements": [
+            "Add more specific examples.",
+            "Structure your answer more clearly."
+        ],
+        "better_answer":
+            "Give a clear explanation, include a practical example, "
+            "and explain why your approach works.",
+        "concepts_to_review": [
+            "Core concepts related to this question"
+        ]
     }
 
 
-# ============================================================
+# =========================================================
+# FINAL REPORT
+# =========================================================
+
+def generate_final_report(
+    evaluations: List[Dict[str, Any]],
+    role: str
+) -> Dict[str, Any]:
+
+    if not evaluations:
+        return {}
+
+    average = sum(
+        float(e.get("score", 0))
+        for e in evaluations
+    ) / len(evaluations)
+
+    overall = round(average * 10)
+
+    if overall >= 90:
+        level = "Excellent"
+    elif overall >= 80:
+        level = "Very Good"
+    elif overall >= 70:
+        level = "Good"
+    elif overall >= 50:
+        level = "Needs Improvement"
+    else:
+        level = "Beginner"
+
+    all_strengths = []
+    all_improvements = []
+    all_concepts = []
+
+    for evaluation in evaluations:
+        all_strengths.extend(
+            evaluation.get("strengths", [])
+        )
+        all_improvements.extend(
+            evaluation.get("improvements", [])
+        )
+        all_concepts.extend(
+            evaluation.get("concepts_to_review", [])
+        )
+
+    prompt = f"""
+Create a short final interview report.
+
+Role: {role}
+Overall score: {overall}/100
+Performance level: {level}
+
+Evaluation data:
+{json.dumps(evaluations, indent=2)}
+
+Return ONLY valid JSON:
+
+{{
+  "summary": "short interview summary",
+  "recommendations": [
+    "recommendation 1",
+    "recommendation 2",
+    "recommendation 3"
+  ]
+}}
+"""
+
+    ai_result = call_groq(prompt, temperature=0.3)
+
+    summary = (
+        f"You completed the interview for the {role} role "
+        f"with an overall score of {overall}/100."
+    )
+
+    recommendations = [
+        "Practice explaining technical concepts clearly.",
+        "Use specific examples when answering interview questions.",
+        "Review the concepts identified in your weak areas."
+    ]
+
+    if ai_result:
+        try:
+            ai_result = re.sub(
+                r"```json",
+                "",
+                ai_result,
+                flags=re.IGNORECASE
+            )
+            ai_result = ai_result.replace("```", "").strip()
+
+            match = re.search(
+                r"\{.*\}",
+                ai_result,
+                re.DOTALL
+            )
+
+            if match:
+                parsed = json.loads(match.group())
+
+                summary = parsed.get(
+                    "summary",
+                    summary
+                )
+
+                recommendations = parsed.get(
+                    "recommendations",
+                    recommendations
+                )
+
+        except Exception:
+            pass
+
+    return {
+        "overall_score": overall,
+        "performance_level": level,
+        "summary": summary,
+        "recommendations": recommendations,
+        "strengths": list(dict.fromkeys(all_strengths))[:6],
+        "improvements": list(dict.fromkeys(all_improvements))[:6],
+        "concepts_to_review": list(dict.fromkeys(all_concepts))[:6]
+    }
+
+
+# =========================================================
+# RESUME EXTRACTION
+# =========================================================
+
+def extract_resume_text(uploaded_file):
+
+    if not PDF_AVAILABLE:
+        return ""
+
+    try:
+        reader = PdfReader(uploaded_file)
+
+        text = ""
+
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            text += page_text + "\n"
+
+        return text.strip()
+
+    except Exception as e:
+        st.session_state.last_error = str(e)
+        return ""
+
+
+# =========================================================
 # RESET
-# ============================================================
+# =========================================================
 
 def reset_interview():
 
-    st.session_state.questions = []
-
-    st.session_state.answers = []
-
-    st.session_state.evaluations = []
-
-    st.session_state.scores = []
-
-    st.session_state.current_question = 0
-
     st.session_state.interview_started = False
+    st.session_state.questions = []
+    st.session_state.current_question = 0
+    st.session_state.answers = []
+    st.session_state.evaluations = []
+    st.session_state.final_report = None
+    st.session_state.last_error = ""
 
-    st.session_state.interview_finished = False
 
-    st.session_state.result_counted = False
-
-
-# ============================================================
+# =========================================================
 # SIDEBAR
-# ============================================================
+# =========================================================
 
-def show_sidebar():
+with st.sidebar:
 
-    with st.sidebar:
-
-        st.markdown(
-            """
-            <div class="sidebar-brand">
-
-                <div class="sidebar-logo">
-                    🤖
-                </div>
-
-                <div class="sidebar-title">
-                    AI Interview
-                </div>
-
-                <div class="sidebar-subtitle">
-                    Smart Interview Preparation
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            '<div class="sidebar-section">Workspace</div>',
-            unsafe_allow_html=True
-        )
-
-        if st.button(
-            "🏠   Home",
-            use_container_width=True
-        ):
-
-            st.session_state.page = "Home"
-
-            st.rerun()
-
-        if st.button(
-            "⚙️   Interview Setup",
-            use_container_width=True
-        ):
-
-            st.session_state.page = "Interview Setup"
-
-            st.rerun()
-
-        if st.button(
-            "🎤   Mock Interview",
-            use_container_width=True
-        ):
-
-            if st.session_state.interview_started:
-
-                st.session_state.page = (
-                    "Mock Interview"
-                )
-
-            else:
-
-                st.session_state.page = (
-                    "Interview Setup"
-                )
-
-            st.rerun()
-
-        if st.button(
-            "📊   Results",
-            use_container_width=True
-        ):
-
-            st.session_state.page = "Results"
-
-            st.rerun()
-
-        if st.button(
-            "📚   History",
-            use_container_width=True
-        ):
-
-            st.session_state.page = "History"
-
-            st.rerun()
-
-        st.markdown(
-            '<div class="sidebar-section">Information</div>',
-            unsafe_allow_html=True
-        )
-
-        if st.button(
-            "ℹ️   About",
-            use_container_width=True
-        ):
-
-            st.session_state.page = "About"
-
-            st.rerun()
-
-        st.markdown(
-            "<br>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            """
-            <div style="
-                padding:15px;
-                border-radius:14px;
-                background:#101827;
-                border:1px solid #202c45;
-            ">
-
-                <div style="
-                    color:#a5b4fc;
-                    font-size:12px;
-                    font-weight:800;
-                ">
-                    AI ENGINE
-                </div>
-
-                <div style="
-                    color:#64748b;
-                    font-size:11px;
-                    margin-top:5px;
-                    line-height:1.5;
-                ">
-                    Powered by Groq AI
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-
-# ============================================================
-# HOME
-# ============================================================
-
-def show_home():
-
-    st.markdown(
-        """
-        <div class="topbar">
-
-            <div class="topbar-title">
-                AI Interview Simulator
-            </div>
-
-            <div class="status-pill">
-                ● AI SYSTEM ONLINE
-            </div>
-
+    st.html("""
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">🎤</div>
+        <div class="sidebar-logo-title">
+            AI Interview Simulator
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # HERO
-
-    st.markdown(
-        """
-        <div class="hero-container">
-
-            <div class="hero-content">
-
-                <div class="hero-badge">
-                    ✦ AI-POWERED INTERVIEW PRACTICE
-                </div>
-
-                <div class="hero-title">
-                    Master Your Next
-                    <br>
-                    <span class="gradient-text">
-                        Interview with AI.
-                    </span>
-                </div>
-
-                <div class="hero-subtitle">
-                    Practice. Improve. Get Interview-Ready.
-                </div>
-
-                <div class="hero-description">
-                    Experience realistic technical, HR and
-                    behavioral interviews with an AI interviewer.
-                    Get intelligent scoring, detailed feedback,
-                    resume-based questions and personalized
-                    recommendations.
-                </div>
-
-            </div>
-
-            <div class="ai-orb-ring"></div>
-
-            <div class="ai-orb">
-                🤖
-            </div>
-
+        <div class="sidebar-logo-subtitle">
+            Practice • Improve • Succeed
         </div>
-        """,
-        unsafe_allow_html=True
+    </div>
+    """)
+
+    st.html("""
+    <div class="sidebar-section">
+        Navigation
+    </div>
+    """)
+
+    if st.button(
+        "🏠  Dashboard",
+        use_container_width=True
+    ):
+        st.session_state.page = "Dashboard"
+        st.rerun()
+
+    if st.button(
+        "⚙️  Interview Setup",
+        use_container_width=True
+    ):
+        st.session_state.page = "Interview Setup"
+        st.rerun()
+
+    if st.button(
+        "🎤  Mock Interview",
+        use_container_width=True
+    ):
+        st.session_state.page = "Mock Interview"
+        st.rerun()
+
+    if st.button(
+        "📊  Results",
+        use_container_width=True
+    ):
+        st.session_state.page = "Results"
+        st.rerun()
+
+    if st.button(
+        "📚  Interview History",
+        use_container_width=True
+    ):
+        st.session_state.page = "Interview History"
+        st.rerun()
+
+    st.html("""
+    <div class="sidebar-section">
+        Current Session
+    </div>
+    """)
+
+    st.write(
+        f"**Role:** {st.session_state.job_role}"
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # HERO CTA
-
-    col1, col2, col3 = st.columns(
-        [1, 1.4, 1]
+    st.write(
+        f"**Difficulty:** {st.session_state.difficulty}"
     )
 
-    with col2:
+    st.write(
+        f"**Questions:** {st.session_state.num_questions}"
+    )
 
-        st.markdown(
-            '<div class="cta-wrap">',
-            unsafe_allow_html=True
-        )
+    if st.button(
+        "🔄 Reset Interview",
+        use_container_width=True
+    ):
+        reset_interview()
+        st.session_state.page = "Dashboard"
+        st.rerun()
 
-        if st.button(
-            "🚀  Start Your AI Interview",
-            use_container_width=True
-        ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
+# =========================================================
+# DASHBOARD
+# =========================================================
 
-            st.rerun()
+def show_dashboard():
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
+    st.html("""
+    <div class="hero">
 
-    # STATS
-
-    st.markdown(
-        """
-        <div class="section-heading">
-            Your Interview Dashboard
+        <div class="hero-badge">
+            🤖 AI-POWERED INTERVIEW PRACTICE
         </div>
 
-        <div class="section-description">
-            Track your preparation and improve with every interview.
+        <div class="hero-title">
+            AI Interview Simulator
         </div>
-        """,
-        unsafe_allow_html=True
-    )
 
-    completed = (
-        st.session_state.interview_count
-    )
+        <div class="hero-subtitle">
+            Practice. Improve. Get Interview-Ready.
+        </div>
 
-    total_questions = sum(
-        len(
-            item.get(
-                "questions",
-                []
-            )
+        <div class="hero-description">
+            Practice realistic interviews with an AI interviewer,
+            receive instant feedback, discover your weak areas,
+            and improve your confidence before the real interview.
+        </div>
+
+    </div>
+    """)
+
+    completed = len(st.session_state.history)
+
+    if st.session_state.evaluations:
+        avg_score = round(
+            sum(
+                e.get("score", 0)
+                for e in st.session_state.evaluations
+            ) / len(st.session_state.evaluations),
+            1
         )
-        for item in st.session_state.history
-    )
-
-    if st.session_state.scores:
-
-        average = round(
-            mean(
-                st.session_state.scores
-            ) * 10
-        )
-
     else:
+        avg_score = 0
 
-        average = 0
+    improvement_areas = 0
 
-    stats = [
-        (
-            "🎯",
-            completed,
-            "Interviews Completed"
-        ),
-        (
-            "📝",
-            total_questions,
-            "Questions Practiced"
-        ),
-        (
-            "⭐",
-            f"{average}%",
-            "Average Score"
-        ),
-        (
-            "🚀",
-            "∞",
-            "Potential to Improve"
-        ),
-    ]
+    for evaluation in st.session_state.evaluations:
+        improvement_areas += len(
+            evaluation.get("improvements", [])
+        )
 
     cols = st.columns(4)
 
-    for col, item in zip(
-        cols,
-        stats
-    ):
+    stats = [
+        ("❓", st.session_state.num_questions, "Interview Questions"),
+        ("⭐", f"{avg_score}/10", "Average Score"),
+        ("🎯", completed, "Interviews Completed"),
+        ("📈", improvement_areas, "Improvement Areas")
+    ]
+
+    for col, stat in zip(cols, stats):
+
+        icon, value, label = stat
 
         with col:
-
-            icon, number, label = item
-
-            st.markdown(
+            st.html(
                 f"""
                 <div class="stat-card">
 
@@ -1919,663 +982,362 @@ def show_home():
                         {icon}
                     </div>
 
-                    <div class="stat-number">
-                        {number}
+                    <div class="stat-value">
+                        {html.escape(str(value))}
                     </div>
 
                     <div class="stat-label">
-                        {label}
+                        {html.escape(label)}
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True
+                """
             )
 
-    # FEATURES
+    st.write("")
 
-    st.markdown(
-        """
-        <div class="section-heading">
-            Everything You Need to Improve
+    col1, col2 = st.columns([1.5, 1])
+
+    with col1:
+
+        st.html("""
+        <div class="card">
+
+            <div class="card-title">
+                🚀 Start Your Interview
+            </div>
+
+            <div class="card-subtitle">
+                Configure your interview and start practicing
+                with your AI interviewer.
+            </div>
+
         </div>
+        """)
 
-        <div class="section-description">
-            A complete AI-powered interview preparation workspace.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    features = [
-
-        (
-            "🤖",
-            "AI Interviewer",
-            "Get realistic questions generated dynamically for your target role, experience and difficulty."
-        ),
-
-        (
-            "🧠",
-            "Smart Evaluation",
-            "AI analyzes your answers for correctness, relevance, communication and technical knowledge."
-        ),
-
-        (
-            "📊",
-            "Performance Analytics",
-            "Understand your strengths, weaknesses, confidence and overall interview performance."
-        ),
-
-        (
-            "📄",
-            "Resume-Based Practice",
-            "Upload your resume and generate interview questions based on your own experience."
-        ),
-
-        (
-            "🎯",
-            "Multiple Interview Modes",
-            "Practice Technical, HR, Behavioral or Mixed interview sessions."
-        ),
-
-        (
-            "📈",
-            "Personalized Feedback",
-            "Get better-answer examples and concepts you should review before your next interview."
-        ),
-    ]
-
-    for row in range(
-        0,
-        len(features),
-        3
-    ):
-
-        cols = st.columns(3)
-
-        for col, feature in zip(
-            cols,
-            features[row:row + 3]
+        if st.button(
+            "⚙️ Configure Interview",
+            type="primary",
+            use_container_width=True
         ):
-
-            icon, title, text = feature
-
-            with col:
-
-                st.markdown(
-                    f"""
-                    <div class="feature-card">
-
-                        <div class="feature-icon">
-                            {icon}
-                        </div>
-
-                        <div class="feature-title">
-                            {title}
-                        </div>
-
-                        <div class="feature-text">
-                            {text}
-                        </div>
-
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-    # HOW IT WORKS
-
-    st.markdown(
-        """
-        <div class="section-heading">
-            How It Works
-        </div>
-
-        <div class="section-description">
-            Start practicing in three simple steps.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    steps = [
-
-        (
-            "01",
-            "Configure",
-            "Choose your target role, interview type, difficulty and experience level."
-        ),
-
-        (
-            "02",
-            "Practice",
-            "Answer AI-generated questions exactly as you would in a real interview."
-        ),
-
-        (
-            "03",
-            "Improve",
-            "Review your score, feedback, strengths and concepts to study."
-        ),
-    ]
-
-    cols = st.columns(3)
-
-    for col, step in zip(
-        cols,
-        steps
-    ):
-
-        with col:
-
-            number, title, text = step
-
-            st.markdown(
-                f"""
-                <div class="step-card">
-
-                    <div class="step-number">
-                        STEP {number}
-                    </div>
-
-                    <div class="step-title">
-                        {title}
-                    </div>
-
-                    <div class="step-text">
-                        {text}
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    # FINAL CTA
-
-    st.markdown(
-        "<br><br>",
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        """
-        <div style="
-            text-align:center;
-            padding:42px 20px;
-            border-radius:22px;
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(99,102,241,0.12),
-                    rgba(139,92,246,0.06)
-                );
-            border:1px solid #253252;
-        ">
-
-            <div style="
-                color:#ffffff;
-                font-size:27px;
-                font-weight:850;
-            ">
-                Ready to level up your interview skills?
-            </div>
-
-            <div style="
-                color:#64748b;
-                font-size:14px;
-                margin-top:8px;
-            ">
-                Your next interview practice session starts here.
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(
-        [1, 1.2, 1]
-    )
+            st.session_state.page = "Interview Setup"
+            st.rerun()
 
     with col2:
 
-        st.markdown(
-            '<div class="cta-wrap">',
-            unsafe_allow_html=True
-        )
+        st.html("""
+        <div class="info-box">
 
-        if st.button(
-            "🎤  Begin Interview Practice",
-            use_container_width=True
-        ):
+            <strong>💡 Pro Tip</strong><br><br>
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
+            Keep your answers structured:
+            <br>
+            <b>Situation → Action → Result</b>
 
-            st.rerun()
+            <br><br>
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
+            For technical questions, explain your
+            reasoning instead of only giving the final answer.
+
+        </div>
+        """)
 
 
-# ============================================================
+# =========================================================
 # INTERVIEW SETUP
-# ============================================================
+# =========================================================
 
 def show_interview_setup():
 
-    st.markdown(
-        """
-        <div class="topbar">
+    st.title("⚙️ Interview Setup")
 
-            <div class="topbar-title">
-                Interview Configuration
-            </div>
-
-            <div class="status-pill">
-                ● READY
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.caption(
+        "Customize your AI-powered mock interview."
     )
 
-    st.markdown(
-        """
-        <div class="section-heading">
-            ⚙️ Build Your Interview
-        </div>
+    st.html("""
+    <div class="info-box">
 
-        <div class="section-description">
-            Configure your AI interviewer before you begin.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        🎯 <b>Choose your role, interview type,
+        difficulty and experience level.</b>
 
-    left, right = st.columns(
-        2,
-        gap="large"
-    )
+        The AI will generate questions based on
+        your selections.
 
-    # LEFT
+    </div>
+    """)
 
-    with left:
+    col1, col2 = st.columns(2)
 
-        st.markdown(
-            """
-            <div class="dark-panel">
+    with col1:
 
-                <div class="panel-title">
-                    🎯 Interview Preferences
-                </div>
+        roles = [
+            "Software Engineer",
+            "Python Developer",
+            "AI Engineer",
+            "Machine Learning Engineer",
+            "Data Scientist",
+            "Data Analyst",
+            "Web Developer",
+            "Frontend Developer",
+            "Backend Developer",
+            "Cybersecurity Analyst",
+            "Computer Science Student",
+            "Custom Role"
+        ]
 
-                <div class="panel-subtitle">
-                    Tell the AI what kind of interview you want.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        job_role = st.selectbox(
+        role = st.selectbox(
             "💼 Job Role",
-
-            [
-                "Software Engineer",
-                "Python Developer",
-                "AI Engineer",
-                "Machine Learning Engineer",
-                "Data Scientist",
-                "Data Analyst",
-                "Web Developer",
-                "Frontend Developer",
-                "Backend Developer",
-                "Cybersecurity Analyst",
-                "Computer Science Student",
-                "Custom Role",
-            ]
+            roles,
+            index=roles.index(
+                st.session_state.job_role
+            ) if st.session_state.job_role in roles else 0
         )
 
-        if job_role == "Custom Role":
+        if role == "Custom Role":
 
-            job_role = st.text_input(
-                "Custom Job Role",
+            role = st.text_input(
+                "Enter your custom role",
                 placeholder="e.g. Generative AI Engineer"
             )
 
+        interview_types = [
+            "Technical",
+            "HR",
+            "Behavioral",
+            "Mixed"
+        ]
+
         interview_type = st.selectbox(
-            "🎤 Interview Type",
-
-            [
-                "Technical Interview",
-                "HR Interview",
-                "Behavioral Interview",
-                "Mixed Interview",
-            ]
+            "🎯 Interview Type",
+            interview_types,
+            index=interview_types.index(
+                st.session_state.interview_type
+            )
         )
 
-        difficulty = st.selectbox(
-            "📈 Difficulty",
-
-            [
-                "Beginner",
-                "Intermediate",
-                "Advanced",
-                "Expert",
-            ]
-        )
-
-    # RIGHT
-
-    with right:
-
-        st.markdown(
-            """
-            <div class="dark-panel">
-
-                <div class="panel-title">
-                    👨‍💻 Candidate Profile
-                </div>
-
-                <div class="panel-subtitle">
-                    Customize the interview for your experience.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        number_questions = st.selectbox(
-            "🔢 Number of Questions",
-            [5, 10, 15]
-        )
+        experience_levels = [
+            "Fresher",
+            "0–1 Years",
+            "1–3 Years",
+            "3+ Years"
+        ]
 
         experience = st.selectbox(
-            "💼 Experience Level",
-
-            [
-                "Fresher",
-                "0–1 Years",
-                "1–3 Years",
-                "3+ Years",
-            ]
+            "👤 Experience Level",
+            experience_levels,
+            index=experience_levels.index(
+                st.session_state.experience
+            )
         )
-
-        st.markdown(
-            "#### 📄 Optional Resume"
-        )
-
-        resume_file = st.file_uploader(
-            "Upload your resume PDF",
-            type=["pdf"]
-        )
-
-        if resume_file:
-
-            if (
-                st.session_state.resume_name
-                != resume_file.name
-            ):
-
-                with st.spinner(
-                    "Reading your resume..."
-                ):
-
-                    text = extract_resume_text(
-                        resume_file
-                    )
-
-                st.session_state.resume_text = text
-
-                st.session_state.resume_name = (
-                    resume_file.name
-                )
-
-            if st.session_state.resume_text:
-
-                st.success(
-                    "✅ Resume loaded successfully."
-                )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(
-        [1, 1.4, 1]
-    )
 
     with col2:
 
-        st.markdown(
-            '<div class="cta-wrap">',
-            unsafe_allow_html=True
+        difficulties = [
+            "Beginner",
+            "Intermediate",
+            "Advanced",
+            "Expert"
+        ]
+
+        difficulty = st.selectbox(
+            "🔥 Difficulty",
+            difficulties,
+            index=difficulties.index(
+                st.session_state.difficulty
+            )
         )
 
-        if st.button(
-            "🚀  Start AI Interview",
-            use_container_width=True
-        ):
+        num_questions = st.selectbox(
+            "❓ Number of Questions",
+            [5, 10, 15],
+            index=[5, 10, 15].index(
+                st.session_state.num_questions
+            )
+        )
 
-            if not job_role.strip():
+        st.write("")
+
+        st.html("""
+        <div class="card">
+
+            <div class="card-title">
+                📄 Resume-Based Interview
+            </div>
+
+            <div class="card-subtitle">
+                Upload your resume and let the AI
+                generate personalized questions.
+            </div>
+
+        </div>
+        """)
+
+        uploaded_resume = st.file_uploader(
+            "Upload Resume PDF",
+            type=["pdf"]
+        )
+
+        if uploaded_resume:
+
+            if not PDF_AVAILABLE:
 
                 st.warning(
-                    "Please enter a job role."
+                    "PyPDF2 is not installed."
                 )
 
-                return
+            else:
+
+                resume_text = extract_resume_text(
+                    uploaded_resume
+                )
+
+                if resume_text:
+
+                    st.session_state.resume_text = resume_text
+                    st.session_state.resume_name = (
+                        uploaded_resume.name
+                    )
+                    st.session_state.resume_mode = True
+
+                    st.success(
+                        "Resume uploaded successfully!"
+                    )
+
+    st.write("")
+
+    if st.button(
+        "🚀 START INTERVIEW",
+        type="primary",
+        use_container_width=True
+    ):
+
+        if not role or not role.strip():
+
+            st.error(
+                "Please enter a job role."
+            )
+
+        else:
+
+            st.session_state.job_role = role
+            st.session_state.interview_type = interview_type
+            st.session_state.difficulty = difficulty
+            st.session_state.num_questions = num_questions
+            st.session_state.experience = experience
 
             reset_interview()
 
-            st.session_state.interview_config = {
+            st.session_state.job_role = role
+            st.session_state.interview_type = interview_type
+            st.session_state.difficulty = difficulty
+            st.session_state.num_questions = num_questions
+            st.session_state.experience = experience
 
-                "job_role":
-                    job_role,
+            with st.spinner(
+                "🤖 AI is preparing your first question..."
+            ):
 
-                "interview_type":
+                first_question = generate_question(
+                    role,
                     interview_type,
-
-                "difficulty":
                     difficulty,
+                    experience
+                )
 
-                "number_questions":
-                    number_questions,
-
-                "experience":
-                    experience,
-            }
+            st.session_state.questions = [
+                first_question
+            ]
 
             st.session_state.interview_started = True
-
-            st.session_state.page = (
-                "Mock Interview"
-            )
+            st.session_state.current_question = 0
+            st.session_state.page = "Mock Interview"
 
             st.rerun()
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
 
-
-# ============================================================
+# =========================================================
 # MOCK INTERVIEW
-# ============================================================
+# =========================================================
 
 def show_mock_interview():
 
     if not st.session_state.interview_started:
 
-        st.warning(
-            "Please start an interview first."
-        )
+        st.html("""
+        <div class="warning-box">
+
+            ⚠️ <b>No active interview.</b><br><br>
+
+            Please configure your interview first.
+
+        </div>
+        """)
 
         if st.button(
             "⚙️ Go to Interview Setup",
-            use_container_width=True
+            type="primary"
         ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
         return
 
-    config = st.session_state.interview_config
+    current = st.session_state.current_question
+    total = st.session_state.num_questions
 
-    total = config.get(
-        "number_questions",
-        5
-    )
+    questions = st.session_state.questions
 
-    current = (
-        st.session_state.current_question
-    )
-
-    if current >= total:
-
-        st.session_state.interview_finished = True
-
-        if not st.session_state.result_counted:
-
-            st.session_state.interview_count += 1
-
-            st.session_state.result_counted = True
-
-            report = generate_final_report()
-
-            st.session_state.history.append(
-                {
-                    "role":
-                        config.get(
-                            "job_role",
-                            "Unknown"
-                        ),
-
-                    "type":
-                        config.get(
-                            "interview_type",
-                            "Unknown"
-                        ),
-
-                    "difficulty":
-                        config.get(
-                            "difficulty",
-                            "Unknown"
-                        ),
-
-                    "score":
-                        report[
-                            "overall_score"
-                        ],
-
-                    "questions":
-                        list(
-                            st.session_state.questions
-                        ),
-
-                    "answers":
-                        list(
-                            st.session_state.answers
-                        ),
-
-                    "evaluations":
-                        list(
-                            st.session_state.evaluations
-                        ),
-                }
-            )
+    if current >= len(questions):
 
         st.session_state.page = "Results"
-
         st.rerun()
 
         return
 
-    # HEADER
+    question = questions[current]
 
-    st.markdown(
-        """
-        <div class="topbar">
+    st.html(
+        f"""
+        <div class="interview-header">
 
-            <div class="topbar-title">
-                🎤 Live AI Interview
+            <div class="interview-title">
+                🎤 Mock Interview
             </div>
 
-            <div class="status-pill">
-                ● INTERVIEW ACTIVE
+            <div class="interview-subtitle">
+                {html.escape(st.session_state.job_role)}
+                •
+                {html.escape(st.session_state.interview_type)}
+                •
+                {html.escape(st.session_state.difficulty)}
             </div>
 
         </div>
-        """,
-        unsafe_allow_html=True
+        """
     )
 
-    st.markdown(
-        f"""
-        <div style="
-            color:#64748b;
-            font-size:13px;
-            margin-bottom:12px;
-        ">
-            {config.get('job_role')}
-            &nbsp; • &nbsp;
-            {config.get('interview_type')}
-            &nbsp; • &nbsp;
-            {config.get('difficulty')}
-        </div>
-        """,
-        unsafe_allow_html=True
+    progress_value = (
+        current / total
+        if total > 0
+        else 0
     )
 
     st.progress(
-        (current + 1) / total,
-
-        text=(
-            f"Question {current + 1} "
-            f"of {total}"
-        )
+        progress_value,
+        text=f"Question {current + 1} of {total}"
     )
 
-    if len(
-        st.session_state.questions
-    ) <= current:
+    # IMPORTANT:
+    # st.html() prevents raw HTML code from appearing.
+    safe_question = html.escape(question)
 
-        with st.spinner(
-            "🤖 AI interviewer is preparing your question..."
-        ):
-
-            question = generate_question()
-
-        if not question:
-
-            return
-
-        st.session_state.questions.append(
-            question
-        )
-
-    question = (
-        st.session_state.questions[current]
-    )
-
-    st.markdown(
+    st.html(
         f"""
         <div class="question-panel">
 
-            <div class="ai-label">
+            <div class="ai-badge">
                 🤖 AI INTERVIEWER
             </div>
 
@@ -2584,61 +1346,40 @@ def show_mock_interview():
             </div>
 
             <div class="question-text">
-                {question}
+                {safe_question}
             </div>
 
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        "<br>",
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
         """
-        <div class="panel-title">
-            📝 Your Answer
-        </div>
-        """,
-        unsafe_allow_html=True
     )
 
-    st.caption(
-        "Answer as if you are speaking directly to the interviewer."
-    )
+    st.write("")
 
     answer = st.text_area(
-        "Your Answer",
-
-        height=220,
-
+        "📝 Your Answer",
         placeholder=(
-            "Type your answer here..."
+            "Type your answer here...\n\n"
+            "Try to explain your reasoning clearly "
+            "and give practical examples."
         ),
-
-        label_visibility="collapsed",
-
-        key=f"answer_{current}",
+        height=220,
+        key=f"answer_{current}"
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([1, 1, 2])
 
     with col1:
 
         submit = st.button(
-            "✅  Submit Answer",
+            "✅ Submit Answer",
+            type="primary",
             use_container_width=True
         )
 
     with col2:
 
         skip = st.button(
-            "⏭️  Skip Question",
+            "⏭️ Skip",
             use_container_width=True
         )
 
@@ -2647,13 +1388,13 @@ def show_mock_interview():
         if not answer.strip():
 
             st.warning(
-                "Please write an answer first."
+                "Please write an answer before submitting."
             )
 
         else:
 
             with st.spinner(
-                "🧠 AI is evaluating your answer..."
+                "🤖 AI is evaluating your answer..."
             ):
 
                 evaluation = evaluate_answer(
@@ -2661,21 +1402,56 @@ def show_mock_interview():
                     answer
                 )
 
-            if evaluation:
+            st.session_state.answers.append(answer)
+            st.session_state.evaluations.append(
+                evaluation
+            )
 
-                st.session_state.answers.append(
-                    answer
-                )
+            if current + 1 >= total:
 
-                st.session_state.evaluations.append(
-                    evaluation
-                )
+                with st.spinner(
+                    "📊 Generating your final report..."
+                ):
 
-                st.session_state.scores.append(
-                    evaluation.get(
-                        "score",
-                        0
+                    report = generate_final_report(
+                        st.session_state.evaluations,
+                        st.session_state.job_role
                     )
+
+                st.session_state.final_report = report
+
+                st.session_state.history.append({
+                    "role": st.session_state.job_role,
+                    "type": st.session_state.interview_type,
+                    "difficulty": st.session_state.difficulty,
+                    "score": report.get(
+                        "overall_score",
+                        0
+                    ),
+                    "level": report.get(
+                        "performance_level",
+                        "Unknown"
+                    ),
+                    "questions": total
+                })
+
+                st.session_state.interview_started = False
+                st.session_state.page = "Results"
+
+                st.rerun()
+
+            else:
+
+                next_question = generate_question(
+                    st.session_state.job_role,
+                    st.session_state.interview_type,
+                    st.session_state.difficulty,
+                    st.session_state.experience,
+                    st.session_state.questions
+                )
+
+                st.session_state.questions.append(
+                    next_question
                 )
 
                 st.session_state.current_question += 1
@@ -2685,755 +1461,512 @@ def show_mock_interview():
     if skip:
 
         st.session_state.answers.append(
-            "[Question skipped]"
+            "[Skipped]"
         )
 
-        evaluation = {
-
+        st.session_state.evaluations.append({
             "score": 0,
-
             "correctness": 0,
-
             "relevance": 0,
-
             "technical_knowledge": 0,
-
             "communication": 0,
-
             "confidence": 0,
-
+            "completeness": 0,
             "strengths": [],
-
             "improvements": [
-                "Try to answer every question."
+                "This question was skipped."
             ],
-
             "better_answer": "",
+            "concepts_to_review": []
+        })
 
-            "concepts_to_review": [],
-        }
+        if current + 1 >= total:
 
-        st.session_state.evaluations.append(
-            evaluation
-        )
+            report = generate_final_report(
+                st.session_state.evaluations,
+                st.session_state.job_role
+            )
 
-        st.session_state.scores.append(0)
+            st.session_state.final_report = report
 
-        st.session_state.current_question += 1
+            st.session_state.history.append({
+                "role": st.session_state.job_role,
+                "type": st.session_state.interview_type,
+                "difficulty": st.session_state.difficulty,
+                "score": report.get(
+                    "overall_score",
+                    0
+                ),
+                "level": report.get(
+                    "performance_level",
+                    "Unknown"
+                ),
+                "questions": total
+            })
 
-        st.rerun()
+            st.session_state.interview_started = False
+            st.session_state.page = "Results"
+
+            st.rerun()
+
+        else:
+
+            next_question = generate_question(
+                st.session_state.job_role,
+                st.session_state.interview_type,
+                st.session_state.difficulty,
+                st.session_state.experience,
+                st.session_state.questions
+            )
+
+            st.session_state.questions.append(
+                next_question
+            )
+
+            st.session_state.current_question += 1
+
+            st.rerun()
 
 
-# ============================================================
+# =========================================================
 # RESULTS
-# ============================================================
+# =========================================================
 
 def show_results():
 
-    st.markdown(
-        """
-        <div class="topbar">
+    report = st.session_state.final_report
 
-            <div class="topbar-title">
-                Interview Performance
-            </div>
+    if not report:
 
-            <div class="status-pill">
-                ✓ COMPLETED
-            </div>
+        st.html("""
+        <div class="warning-box">
+
+            📊 No interview results are available yet.
 
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if not st.session_state.evaluations:
-
-        st.markdown(
-            """
-            <div class="dark-panel">
-
-                <div class="panel-title">
-                    🎯 No Interview Results Yet
-                </div>
-
-                <div class="panel-subtitle">
-                    Complete an interview to unlock your performance report.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
+        """)
 
         if st.button(
-            "🚀 Start Interview",
-            use_container_width=True
+            "🚀 Start an Interview",
+            type="primary"
         ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
         return
 
-    report = generate_final_report()
+    score = report.get(
+        "overall_score",
+        0
+    )
 
-    score = report[
-        "overall_score"
-    ]
+    level = report.get(
+        "performance_level",
+        "Good"
+    )
 
-    if score >= 90:
+    st.html("""
+    <div style="margin-bottom:20px;">
+        <h1 style="color:#111827;">
+            🎯 Interview Complete!
+        </h1>
 
-        level = "Excellent 🏆"
+        <p style="color:#6b7280;">
+            Here is your AI-powered performance report.
+        </p>
+    </div>
+    """)
 
-        message = (
-            "Outstanding interview performance!"
-        )
-
-    elif score >= 80:
-
-        level = "Very Good 🌟"
-
-        message = (
-            "Great job! Keep polishing your skills."
-        )
-
-    elif score >= 70:
-
-        level = "Good 👍"
-
-        message = (
-            "Good foundation. Keep practicing."
-        )
-
-    else:
-
-        level = "Needs Improvement 📈"
-
-        message = (
-            "Keep practicing and focus on your weak areas."
-        )
-
-    st.markdown(
+    st.html(
         f"""
-        <div class="score-panel">
+        <div class="score-card">
 
-            <div class="big-score">
+            <div style="font-size:15px;">
+                OVERALL SCORE
+            </div>
+
+            <div class="score-number">
                 {score}/100
             </div>
 
-            <div class="performance">
-                {level}
+            <div class="score-label">
+                Your interview performance
             </div>
 
-            <div class="performance-text">
-                {message}
+            <div class="result-badge">
+                {html.escape(level)}
             </div>
 
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
         """
-        <div class="section-heading">
-            📊 Performance Breakdown
-        </div>
-
-        <div class="section-description">
-            Here's how you performed across the key interview skills.
-        </div>
-        """,
-        unsafe_allow_html=True
     )
 
-    metrics = [
+    evaluations = st.session_state.evaluations
 
-        (
-            "Technical Knowledge",
-            report["technical"]
-        ),
+    if evaluations:
 
-        (
-            "Communication",
-            report["communication"]
-        ),
-
-        (
-            "Problem Solving",
-            report["problem_solving"]
-        ),
-
-        (
-            "Relevance",
-            report["relevance"]
-        ),
-
-        (
-            "Confidence",
-            report["confidence"]
-        ),
-    ]
-
-    cols = st.columns(5)
-
-    for col, item in zip(
-        cols,
-        metrics
-    ):
-
-        with col:
-
-            label, value = item
-
-            st.markdown(
-                f"""
-                <div class="result-metric">
-
-                    <div class="result-value">
-                        {value}/10
-                    </div>
-
-                    <div class="result-label">
-                        {label}
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
+        metrics = {
+            "Technical Knowledge": round(
+                sum(
+                    e.get(
+                        "technical_knowledge",
+                        0
+                    )
+                    for e in evaluations
+                ) / len(evaluations) * 10
+            ),
+            "Communication": round(
+                sum(
+                    e.get(
+                        "communication",
+                        0
+                    )
+                    for e in evaluations
+                ) / len(evaluations) * 10
+            ),
+            "Relevance": round(
+                sum(
+                    e.get(
+                        "relevance",
+                        0
+                    )
+                    for e in evaluations
+                ) / len(evaluations) * 10
+            ),
+            "Confidence": round(
+                sum(
+                    e.get(
+                        "confidence",
+                        0
+                    )
+                    for e in evaluations
+                ) / len(evaluations) * 10
             )
+        }
 
-    strengths = []
-
-    improvements = []
-
-    concepts = []
-
-    for evaluation in (
-        st.session_state.evaluations
-    ):
-
-        strengths.extend(
-            evaluation.get(
-                "strengths",
-                []
-            )
+        st.subheader(
+            "📈 Performance Breakdown"
         )
 
-        improvements.extend(
-            evaluation.get(
-                "improvements",
-                []
-            )
-        )
+        cols = st.columns(4)
 
-        concepts.extend(
-            evaluation.get(
-                "concepts_to_review",
-                []
-            )
-        )
+        for col, (label, value) in zip(
+            cols,
+            metrics.items()
+        ):
 
-    st.markdown(
-        "<br>",
-        unsafe_allow_html=True
-    )
+            with col:
+
+                st.metric(
+                    label,
+                    f"{value}/100"
+                )
+
+                st.progress(
+                    min(value / 100, 1.0)
+                )
+
+    st.write("")
 
     col1, col2 = st.columns(2)
 
     with col1:
 
-        st.markdown(
-            """
-            <div class="panel-title">
-                💪 Your Strengths
+        strengths = report.get(
+            "strengths",
+            []
+        )
+
+        st.html("""
+        <div class="result-section">
+
+            <div class="result-heading">
+                💪 Strengths
             </div>
-            """,
-            unsafe_allow_html=True
-        )
 
-        unique_strengths = list(
-            dict.fromkeys(
-                strengths
-            )
-        )
+        </div>
+        """)
 
-        if unique_strengths:
+        if strengths:
 
-            for item in unique_strengths[:8]:
+            for item in strengths:
 
-                st.success(
-                    item
+                st.markdown(
+                    f"✓ {item}"
                 )
 
         else:
 
-            st.info(
-                "Keep practicing to identify your strongest areas."
+            st.write(
+                "No strengths recorded."
             )
 
     with col2:
 
-        st.markdown(
-            """
-            <div class="panel-title">
+        improvements = report.get(
+            "improvements",
+            []
+        )
+
+        st.html("""
+        <div class="result-section">
+
+            <div class="result-heading">
                 📈 Improvement Areas
             </div>
-            """,
-            unsafe_allow_html=True
-        )
 
-        unique_improvements = list(
-            dict.fromkeys(
-                improvements
-            )
-        )
+        </div>
+        """)
 
-        if unique_improvements:
+        if improvements:
 
-            for item in unique_improvements[:8]:
+            for item in improvements:
 
-                st.warning(
-                    item
+                st.markdown(
+                    f"• {item}"
                 )
 
         else:
 
-            st.info(
-                "No major improvement areas found."
+            st.write(
+                "No improvement areas recorded."
             )
 
-    unique_concepts = list(
-        dict.fromkeys(
-            concepts
-        )
+    st.html("""
+    <div class="result-section">
+
+        <div class="result-heading">
+            🤖 AI Recommendations
+        </div>
+
+    </div>
+    """)
+
+    recommendations = report.get(
+        "recommendations",
+        []
     )
 
-    if unique_concepts:
+    for recommendation in recommendations:
 
         st.markdown(
-            "<br>",
-            unsafe_allow_html=True
+            f"💡 {recommendation}"
         )
 
-        st.markdown(
-            """
-            <div class="panel-title">
-                📚 Concepts to Review
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    st.html("""
+    <div class="result-section">
 
-        for concept in unique_concepts[:12]:
+        <div class="result-heading">
+            📚 Concepts to Review
+        </div>
+
+    </div>
+    """)
+
+    concepts = report.get(
+        "concepts_to_review",
+        []
+    )
+
+    if concepts:
+
+        for concept in concepts:
 
             st.markdown(
-                f"""
-                <div style="
-                    padding:11px 14px;
-                    margin-top:8px;
-                    border-radius:10px;
-                    background:#111827;
-                    border:1px solid #202c45;
-                    color:#cbd5e1;
-                    font-size:13px;
-                ">
-                    📌 {concept}
-                </div>
-                """,
-                unsafe_allow_html=True
+                f"📌 {concept}"
             )
 
-    st.markdown(
+    else:
+
+        st.write(
+            "No specific concepts were identified."
+        )
+
+    st.html(
+        f"""
+        <div class="success-box">
+
+            <b>📝 Interview Summary</b><br><br>
+
+            {html.escape(
+                str(
+                    report.get(
+                        "summary",
+                        ""
+                    )
+                )
+            )}
+
+        </div>
         """
-        <div class="section-heading">
-            📝 Question-by-Question Review
-        </div>
-
-        <div class="section-description">
-            Review your answers and see how the AI evaluated them.
-        </div>
-        """,
-        unsafe_allow_html=True
     )
 
-    for i, question in enumerate(
-        st.session_state.questions
-    ):
-
-        evaluation = (
-
-            st.session_state.evaluations[i]
-
-            if i < len(
-                st.session_state.evaluations
-            )
-
-            else {}
-        )
-
-        answer = (
-
-            st.session_state.answers[i]
-
-            if i < len(
-                st.session_state.answers
-            )
-
-            else ""
-        )
-
-        with st.expander(
-            f"Question {i + 1}  •  "
-            f"{evaluation.get('score', 0)}/10"
-        ):
-
-            st.markdown(
-                "**Question**"
-            )
-
-            st.write(
-                question
-            )
-
-            st.markdown(
-                "**Your Answer**"
-            )
-
-            st.write(
-                answer
-            )
-
-            st.markdown(
-                "**AI Feedback**"
-            )
-
-            st.write(
-                f"Correctness: "
-                f"{evaluation.get('correctness', 0)}/10"
-            )
-
-            st.write(
-                f"Technical Knowledge: "
-                f"{evaluation.get('technical_knowledge', 0)}/10"
-            )
-
-            st.write(
-                f"Communication: "
-                f"{evaluation.get('communication', 0)}/10"
-            )
-
-            better = evaluation.get(
-                "better_answer",
-                ""
-            )
-
-            if better:
-
-                st.markdown(
-                    "**✨ Better Answer**"
-                )
-
-                st.write(
-                    better
-                )
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.write("")
 
     col1, col2 = st.columns(2)
 
     with col1:
 
         if st.button(
-            "🔄  Start New Interview",
+            "🔄 Start New Interview",
+            type="primary",
             use_container_width=True
         ):
 
             reset_interview()
-
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
     with col2:
 
         if st.button(
-            "🏠  Back to Home",
+            "🏠 Back to Dashboard",
             use_container_width=True
         ):
 
-            st.session_state.page = "Home"
-
+            st.session_state.page = "Dashboard"
             st.rerun()
 
 
-# ============================================================
+# =========================================================
 # HISTORY
-# ============================================================
+# =========================================================
 
 def show_history():
 
-    st.markdown(
-        """
-        <div class="section-heading">
-            📚 Interview History
+    st.title("📚 Interview History")
+
+    history = st.session_state.history
+
+    if not history:
+
+        st.html("""
+        <div class="info-box">
+
+            📚 No interviews completed in this session yet.
+
+            <br><br>
+
+            Complete your first mock interview
+            and your results will appear here.
+
         </div>
-
-        <div class="section-description">
-            Review your completed interview sessions.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if not st.session_state.history:
-
-        st.markdown(
-            """
-            <div class="dark-panel">
-
-                <div class="panel-title">
-                    No interviews yet
-                </div>
-
-                <div class="panel-subtitle">
-                    Complete your first AI interview to build your history.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if st.button(
-            "🚀 Start Your First Interview",
-            use_container_width=True
-        ):
-
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
-            st.rerun()
+        """)
 
         return
 
-    for i, interview in enumerate(
-        reversed(
-            st.session_state.history
-        ),
-        1
+    for index, interview in enumerate(
+        reversed(history),
+        start=1
     ):
 
-        score = interview.get(
-            "score",
-            0
-        )
+        st.html(
+            f"""
+            <div class="card">
 
-        with st.expander(
-            f"Interview {i}  •  "
-            f"{interview.get('role')}  •  "
-            f"{score}/100"
-        ):
+                <div class="card-title">
+                    🎤 Interview #{index}
+                </div>
 
-            st.write(
-                "**Role:**",
-                interview.get(
-                    "role"
-                )
-            )
+                <div style="
+                    color:#6b7280;
+                    font-size:14px;
+                    line-height:2;
+                ">
 
-            st.write(
-                "**Type:**",
-                interview.get(
-                    "type"
-                )
-            )
+                    <b>Role:</b>
+                    {html.escape(
+                        str(
+                            interview.get(
+                                "role",
+                                "Unknown"
+                            )
+                        )
+                    )}
+                    <br>
 
-            st.write(
-                "**Difficulty:**",
-                interview.get(
-                    "difficulty"
-                )
-            )
+                    <b>Type:</b>
+                    {html.escape(
+                        str(
+                            interview.get(
+                                "type",
+                                "Unknown"
+                            )
+                        )
+                    )}
+                    <br>
 
-            st.progress(
-                score / 100
-            )
+                    <b>Difficulty:</b>
+                    {html.escape(
+                        str(
+                            interview.get(
+                                "difficulty",
+                                "Unknown"
+                            )
+                        )
+                    )}
+                    <br>
 
+                    <b>Questions:</b>
+                    {interview.get("questions", 0)}
+                    <br>
 
-# ============================================================
-# ABOUT
-# ============================================================
+                    <b>Score:</b>
+                    {interview.get("score", 0)}/100
+                    <br>
 
-def show_about():
+                    <b>Performance:</b>
+                    {html.escape(
+                        str(
+                            interview.get(
+                                "level",
+                                "Unknown"
+                            )
+                        )
+                    )}
 
-    st.markdown(
-        """
-        <div class="section-heading">
-            ℹ️ About AI Interview Simulator
-        </div>
+                </div>
 
-        <div class="section-description">
-            A portfolio-ready AI interview preparation platform.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        """
-        <div class="dark-panel">
-
-            <div class="panel-title">
-                🤖 What is AI Interview Simulator?
             </div>
-
-            <div style="
-                color:#94a3b8;
-                margin-top:14px;
-                line-height:1.8;
-                font-size:14px;
-            ">
-                AI Interview Simulator is an AI-powered application
-                designed to help students and job seekers practice
-                realistic interviews, receive instant feedback and
-                identify areas for improvement.
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        "<br>",
-        unsafe_allow_html=True
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.markdown(
             """
-            <div class="feature-card">
-
-                <div class="feature-icon">
-                    🛠️
-                </div>
-
-                <div class="feature-title">
-                    Technology Stack
-                </div>
-
-                <div class="feature-text">
-                    Python<br>
-                    Streamlit<br>
-                    Groq API<br>
-                    PyPDF2<br>
-                    GitHub<br>
-                    Streamlit Cloud
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    with col2:
-
-        st.markdown(
-            """
-            <div class="feature-card">
-
-                <div class="feature-icon">
-                    🚀
-                </div>
-
-                <div class="feature-title">
-                    Future Improvements
-                </div>
-
-                <div class="feature-text">
-                    Voice interviews<br>
-                    Video interviews<br>
-                    Downloadable reports<br>
-                    Performance charts<br>
-                    Multi-language support<br>
-                    Advanced AI models
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
         )
 
 
-# ============================================================
-# ROUTER
-# ============================================================
+# =========================================================
+# PAGE ROUTER
+# =========================================================
 
-show_sidebar()
+if st.session_state.page == "Dashboard":
 
-page = st.session_state.page
+    show_dashboard()
 
-if page == "Home":
-
-    show_home()
-
-elif page == "Interview Setup":
+elif st.session_state.page == "Interview Setup":
 
     show_interview_setup()
 
-elif page == "Mock Interview":
+elif st.session_state.page == "Mock Interview":
 
     show_mock_interview()
 
-elif page == "Results":
+elif st.session_state.page == "Results":
 
     show_results()
 
-elif page == "History":
+elif st.session_state.page == "Interview History":
 
     show_history()
 
-elif page == "About":
 
-    show_about()
-
-
-# ============================================================
+# =========================================================
 # FOOTER
-# ============================================================
+# =========================================================
 
-st.markdown(
-    """
-    <div class="footer">
+st.html("""
+<div class="footer">
 
-        <b style="color:#64748b;">
-            🤖 AI Interview Simulator
-        </b>
+    🤖 AI Interview Simulator
+    • Built with Python + Streamlit + Groq
 
-        <br><br>
-
-        Built with Python • Streamlit • Groq AI
-
-        <br>
-
-        Practice. Improve. Get Interview-Ready. 🚀
-
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+</div>
+""")
