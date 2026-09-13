@@ -1970,3 +1970,86 @@ st.html("""
 
 </div>
 """)
+st.html("""
+<style>
+
+/* =========================================
+   FIX: SELECTBOX / INPUT TEXT VISIBILITY
+   ========================================= */
+
+/* Labels */
+div[data-testid="stSelectbox"] label,
+div[data-testid="stNumberInput"] label,
+div[data-testid="stTextInput"] label,
+div[data-testid="stFileUploader"] label {
+    color: #111827 !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+}
+
+/* Selected value inside selectbox */
+div[data-baseweb="select"] {
+    background-color: #ffffff !important;
+    border-radius: 10px !important;
+}
+
+div[data-baseweb="select"] * {
+    color: #111827 !important;
+}
+
+/* Selectbox selected text */
+div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+div[data-baseweb="select"] input {
+    color: #111827 !important;
+}
+
+/* Text input */
+div[data-baseweb="input"] {
+    background-color: #ffffff !important;
+}
+
+div[data-baseweb="input"] input {
+    color: #111827 !important;
+    background-color: #ffffff !important;
+}
+
+/* Placeholder */
+input::placeholder,
+textarea::placeholder {
+    color: #6b7280 !important;
+    opacity: 1 !important;
+}
+
+/* Textarea */
+textarea {
+    color: #111827 !important;
+    background-color: #ffffff !important;
+}
+
+/* Dropdown menu */
+ul[role="listbox"] {
+    background-color: #ffffff !important;
+}
+
+ul[role="listbox"] li {
+    color: #111827 !important;
+    background-color: #ffffff !important;
+}
+
+ul[role="listbox"] li:hover {
+    background-color: #eef2ff !important;
+    color: #111827 !important;
+}
+
+/* Radio buttons */
+div[data-testid="stRadio"] label {
+    color: #111827 !important;
+}
+
+/* File uploader text */
+section[data-testid="stFileUploaderDropzone"] * {
+    color: #111827 !important;
+}
+
+</style>
+""")
