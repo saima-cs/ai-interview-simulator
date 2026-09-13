@@ -3,7 +3,11 @@ import os
 from statistics import mean
 
 import streamlit as st
-from groq import Groq
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 
 try:
     from PyPDF2 import PdfReader
@@ -31,435 +35,331 @@ MODEL_NAME = "openai/gpt-oss-20b"
 
 
 # ============================================================
-# PROFESSIONAL UI / CSS
+# CUSTOM CSS
 # ============================================================
 
 st.markdown(
     """
 <style>
 
-/* ============================================================
-   GLOBAL
-   ============================================================ */
+/* ---------- MAIN APP ---------- */
 
 .stApp {
-    background: #f5f7fb !important;
-    color: #172033 !important;
+    background: #f7f9fc;
 }
 
 .main .block-container {
     max-width: 1250px;
     padding-top: 2rem;
-    padding-bottom: 3rem;
-}
-
-h1, h2, h3, h4 {
-    color: #172033 !important;
-    font-weight: 700 !important;
-}
-
-p {
-    color: #475569 !important;
+    padding-bottom: 4rem;
 }
 
 
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
+/* ---------- SIDEBAR ---------- */
 
 section[data-testid="stSidebar"] {
-    background: #111827 !important;
-    border-right: 1px solid #1f2937 !important;
+    background: #101828;
 }
 
 section[data-testid="stSidebar"] * {
-    color: #f8fafc !important;
+    color: #ffffff;
 }
 
-section[data-testid="stSidebar"] .stButton > button {
-    background: #1f2937 !important;
+.sidebar-logo {
+    text-align: center;
+    padding: 15px 0 25px 0;
+}
+
+.sidebar-logo-icon {
+    font-size: 48px;
+}
+
+.sidebar-logo-title {
+    font-size: 23px;
+    font-weight: 800;
+    color: white;
+}
+
+.sidebar-logo-subtitle {
+    color: #98a2b3;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+
+/* ---------- SIDEBAR BUTTONS ---------- */
+
+section[data-testid="stSidebar"] .stButton button {
+    width: 100%;
+    background: #1d2939 !important;
     color: #ffffff !important;
-    border: 1px solid #374151 !important;
+    border: 1px solid #344054 !important;
     border-radius: 12px !important;
     min-height: 45px !important;
     font-weight: 600 !important;
-    margin-bottom: 5px !important;
+    margin-bottom: 7px !important;
 }
 
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #2563eb !important;
-    border-color: #3b82f6 !important;
-    color: #ffffff !important;
-}
-
-
-/* ============================================================
-   HERO
-   ============================================================ */
-
-.hero-card {
-    background: linear-gradient(
-        135deg,
-        #2563eb 0%,
-        #4f46e5 50%,
-        #7c3aed 100%
-    ) !important;
-
-    padding: 2.3rem;
-    border-radius: 22px;
-    margin-bottom: 1.5rem;
-
-    box-shadow:
-        0 12px 35px rgba(37, 99, 235, 0.18);
-}
-
-.hero-title {
-    color: #ffffff !important;
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin-bottom: 0.3rem;
-}
-
-.hero-subtitle {
-    color: #e0e7ff !important;
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 0.7rem;
-}
-
-.hero-description {
-    color: #eef2ff !important;
-    font-size: 1rem;
-    line-height: 1.65;
+section[data-testid="stSidebar"] .stButton button:hover {
+    background: #344054 !important;
+    border-color: #667085 !important;
 }
 
 
-/* ============================================================
-   CARDS
-   ============================================================ */
+/* ---------- HERO ---------- */
 
-.custom-card {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 18px;
-    padding: 1.4rem;
-    margin: 0.7rem 0;
+.hero {
+    background:
+        radial-gradient(
+            circle at top right,
+            rgba(255,255,255,0.18),
+            transparent 35%
+        ),
+        linear-gradient(
+            135deg,
+            #2563eb,
+            #4f46e5 55%,
+            #7c3aed
+        );
 
-    box-shadow:
-        0 5px 18px rgba(15, 23, 42, 0.06);
+    border-radius: 28px;
+    padding: 55px 50px;
+    color: white;
+    box-shadow: 0 20px 50px rgba(79,70,229,0.20);
+    margin-bottom: 28px;
 }
 
-.card-title {
-    color: #172033 !important;
-    font-size: 1.15rem;
+.hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.25);
+    padding: 8px 15px;
+    border-radius: 30px;
+    font-size: 13px;
     font-weight: 700;
-    margin-bottom: 0.6rem;
+    margin-bottom: 18px;
 }
 
-.card-text {
-    color: #64748b !important;
-    line-height: 1.6;
+.hero h1 {
+    color: white !important;
+    font-size: 48px !important;
+    line-height: 1.08 !important;
+    margin: 0 !important;
+    font-weight: 800 !important;
+}
+
+.hero h2 {
+    color: #e0e7ff !important;
+    font-size: 22px !important;
+    margin-top: 15px !important;
+    font-weight: 600 !important;
+}
+
+.hero p {
+    color: #eef2ff !important;
+    font-size: 16px !important;
+    line-height: 1.7 !important;
+    max-width: 700px;
 }
 
 
-/* ============================================================
-   STAT CARDS
-   ============================================================ */
+/* ---------- SECTION TITLE ---------- */
+
+.section-title {
+    font-size: 27px;
+    font-weight: 800;
+    color: #101828;
+    margin-top: 35px;
+    margin-bottom: 8px;
+}
+
+.section-subtitle {
+    color: #667085;
+    margin-bottom: 22px;
+}
+
+
+/* ---------- FEATURE CARDS ---------- */
+
+.feature-card {
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 18px;
+    padding: 25px;
+    min-height: 175px;
+    box-shadow: 0 8px 25px rgba(16,24,40,0.05);
+}
+
+.feature-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.feature-title {
+    color: #101828;
+    font-size: 18px;
+    font-weight: 750;
+    margin-bottom: 8px;
+}
+
+.feature-text {
+    color: #667085;
+    line-height: 1.55;
+    font-size: 14px;
+}
+
+
+/* ---------- STAT CARDS ---------- */
 
 .stat-card {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 17px;
-    padding: 1.3rem;
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 16px;
+    padding: 22px;
     text-align: center;
-
-    box-shadow:
-        0 5px 18px rgba(15, 23, 42, 0.05);
+    box-shadow: 0 5px 20px rgba(16,24,40,0.04);
 }
 
 .stat-number {
-    color: #2563eb !important;
-    font-size: 2rem;
+    color: #4f46e5;
+    font-size: 30px;
     font-weight: 800;
 }
 
 .stat-label {
-    color: #64748b !important;
-    font-size: 0.9rem;
+    color: #667085;
+    font-size: 13px;
     font-weight: 600;
+    margin-top: 4px;
 }
 
 
-/* ============================================================
-   LABELS
-   ============================================================ */
+/* ---------- SETUP CARD ---------- */
 
-label,
-[data-testid="stWidgetLabel"] p {
-    color: #334155 !important;
-    font-weight: 600 !important;
+.setup-card {
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 8px 25px rgba(16,24,40,0.05);
 }
 
 
-/* ============================================================
-   SELECTBOX
-   ============================================================ */
+/* ---------- INPUTS ---------- */
 
-/* Main selectbox */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    background-color: #ffffff !important;
-    color: #172033 !important;
-
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 11px !important;
-
-    min-height: 48px !important;
+div[data-baseweb="select"] > div {
+    background: white !important;
+    color: #101828 !important;
+    border-color: #d0d5dd !important;
+    border-radius: 10px !important;
 }
 
-/* Selected text */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
-    color: #172033 !important;
+div[data-baseweb="select"] span {
+    color: #101828 !important;
 }
 
-/* Input text */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] input {
-    color: #172033 !important;
-}
-
-/* Dropdown arrow */
-div[data-testid="stSelectbox"] svg {
-    fill: #475569 !important;
-}
-
-
-/* ============================================================
-   DROPDOWN POPUP
-   ============================================================ */
-
-div[data-baseweb="popover"] {
-    background: #ffffff !important;
-}
-
-div[data-baseweb="popover"] * {
-    color: #172033 !important;
-}
-
-div[role="listbox"] {
-    background: #ffffff !important;
-}
-
-div[role="option"] {
-    background: #ffffff !important;
-    color: #172033 !important;
-}
-
-div[role="option"]:hover {
-    background: #eff6ff !important;
-    color: #1d4ed8 !important;
-}
-
-
-/* ============================================================
-   TEXT INPUT
-   ============================================================ */
-
+div[data-testid="stTextArea"] textarea,
 div[data-testid="stTextInput"] input {
-    background: #ffffff !important;
-    color: #172033 !important;
-
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 11px !important;
+    background: white !important;
+    color: #101828 !important;
+    border-color: #d0d5dd !important;
+    border-radius: 10px !important;
 }
 
+div[data-testid="stTextArea"] textarea::placeholder,
 div[data-testid="stTextInput"] input::placeholder {
-    color: #94a3b8 !important;
+    color: #98a2b3 !important;
 }
 
 
-/* ============================================================
-   TEXT AREA
-   ============================================================ */
-
-div[data-testid="stTextArea"] textarea {
-    background: #ffffff !important;
-    color: #172033 !important;
-
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 12px !important;
-}
-
-div[data-testid="stTextArea"] textarea::placeholder {
-    color: #94a3b8 !important;
-}
-
-
-/* ============================================================
-   FILE UPLOADER
-   ============================================================ */
-
-section[data-testid="stFileUploaderDropzone"] {
-    background: #ffffff !important;
-    border: 1px dashed #94a3b8 !important;
-    border-radius: 14px !important;
-}
-
-section[data-testid="stFileUploaderDropzone"] * {
-    color: #475569 !important;
-}
-
-section[data-testid="stFileUploaderDropzone"] button {
-    background: #eff6ff !important;
-    color: #2563eb !important;
-
-    border: 1px solid #bfdbfe !important;
-    border-radius: 9px !important;
-}
-
-
-/* ============================================================
-   BUTTONS
-   ============================================================ */
+/* ---------- BUTTONS ---------- */
 
 .stButton > button {
-    background: #ffffff !important;
-    color: #172033 !important;
-
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 12px !important;
-
-    min-height: 46px !important;
-    font-weight: 600 !important;
-
-    transition: all 0.2s ease;
+    border-radius: 11px !important;
+    min-height: 45px !important;
+    font-weight: 700 !important;
+    border: 1px solid #d0d5dd !important;
+    background: white !important;
+    color: #101828 !important;
 }
 
 .stButton > button:hover {
-    background: #eff6ff !important;
-    color: #1d4ed8 !important;
-    border-color: #3b82f6 !important;
-
-    transform: translateY(-1px);
+    border-color: #6366f1 !important;
+    color: #4338ca !important;
+    background: #f5f3ff !important;
 }
 
 
-/* ============================================================
-   METRICS
-   ============================================================ */
+/* ---------- PRIMARY CTA ---------- */
 
-div[data-testid="stMetric"] {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 16px !important;
-    padding: 1rem !important;
-
-    box-shadow:
-        0 4px 15px rgba(15, 23, 42, 0.05);
-}
-
-div[data-testid="stMetricLabel"] {
-    color: #64748b !important;
-}
-
-div[data-testid="stMetricValue"] {
-    color: #2563eb !important;
-}
-
-
-/* ============================================================
-   INTERVIEWER CARD
-   ============================================================ */
-
-.interviewer-card {
-    background: #ffffff !important;
-
-    border: 1px solid #dbe4f0 !important;
-    border-radius: 20px;
-
-    padding: 1.8rem;
-    margin: 1rem 0;
-
-    box-shadow:
-        0 8px 25px rgba(15, 23, 42, 0.07);
-}
-
-.ai-badge {
-    display: inline-block;
-
-    background: #eef2ff !important;
-    color: #4f46e5 !important;
-
-    padding: 0.45rem 0.85rem;
-    border-radius: 999px;
-
-    font-size: 0.82rem;
-    font-weight: 700;
-
-    margin-bottom: 0.9rem;
-}
-
-.question-box {
-    background: #f8fafc !important;
-
-    border-left: 4px solid #4f46e5;
-
-    padding: 1.25rem;
-    border-radius: 12px;
-
-    color: #172033 !important;
-
-    font-size: 1.08rem;
-    line-height: 1.7;
-
-    margin-top: 0.7rem;
-}
-
-
-/* ============================================================
-   PROGRESS
-   ============================================================ */
-
-div[data-testid="stProgress"] > div > div {
+.primary-btn button {
     background: linear-gradient(
-        90deg,
-        #2563eb,
+        135deg,
+        #4f46e5,
         #7c3aed
+    ) !important;
+
+    color: white !important;
+    border: none !important;
+    font-size: 16px !important;
+    min-height: 52px !important;
+}
+
+.primary-btn button:hover {
+    color: white !important;
+    background: linear-gradient(
+        135deg,
+        #4338ca,
+        #6d28d9
     ) !important;
 }
 
 
-/* ============================================================
-   EXPANDERS
-   ============================================================ */
+/* ---------- INTERVIEW CARD ---------- */
 
-div[data-testid="stExpander"] {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 12px !important;
+.interview-card {
+    background: white;
+    border: 1px solid #eaecf0;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(16,24,40,0.06);
+}
+
+.ai-badge {
+    display: inline-block;
+    background: #eef2ff;
+    color: #4f46e5;
+    padding: 7px 13px;
+    border-radius: 30px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.question {
+    background: #f8fafc;
+    border-left: 5px solid #6366f1;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 15px;
+    color: #101828;
+    font-size: 18px;
+    line-height: 1.65;
 }
 
 
-/* ============================================================
-   ALERTS
-   ============================================================ */
-
-div[data-testid="stAlert"] {
-    border-radius: 12px !important;
-}
-
-
-/* ============================================================
-   FOOTER
-   ============================================================ */
+/* ---------- FOOTER ---------- */
 
 .footer {
     text-align: center;
-    color: #94a3b8 !important;
-    font-size: 0.85rem;
-    padding: 2rem 0 1rem;
+    color: #98a2b3;
+    font-size: 13px;
+    padding: 35px 0 10px 0;
 }
 
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
@@ -467,7 +367,7 @@ div[data-testid="stAlert"] {
 # ============================================================
 
 defaults = {
-    "page": "Dashboard",
+    "page": "Home",
     "questions": [],
     "answers": [],
     "evaluations": [],
@@ -493,7 +393,10 @@ for key, value in defaults.items():
 # ============================================================
 
 def get_groq_client():
-    """Get Groq client from Streamlit Secrets or environment."""
+
+    if Groq is None:
+        st.error("Groq package is not installed.")
+        return None
 
     api_key = None
 
@@ -511,16 +414,15 @@ def get_groq_client():
     try:
         return Groq(api_key=api_key)
     except Exception as e:
-        st.error(f"⚠️ Could not initialize Groq: {e}")
+        st.error(f"Could not initialize Groq: {e}")
         return None
 
 
 # ============================================================
-# RESUME TEXT EXTRACTION
+# RESUME EXTRACTION
 # ============================================================
 
 def extract_resume_text(uploaded_file):
-    """Extract readable text from uploaded PDF."""
 
     if PdfReader is None:
         st.error("PyPDF2 is not installed.")
@@ -530,28 +432,30 @@ def extract_resume_text(uploaded_file):
         return ""
 
     try:
+
         reader = PdfReader(uploaded_file)
 
-        pages = []
+        text = ""
 
         for page in reader.pages:
-            text = page.extract_text() or ""
-            pages.append(text)
+            text += (page.extract_text() or "") + "\n"
 
-        text = "\n".join(pages).strip()
+        text = text.strip()
 
         if not text:
             st.warning(
-                "⚠️ No readable text was found in this PDF."
+                "No readable text was found in this PDF."
             )
             return ""
 
         return text
 
     except Exception as e:
+
         st.error(
-            f"⚠️ Could not read the resume PDF: {e}"
+            f"Could not read resume: {e}"
         )
+
         return ""
 
 
@@ -560,14 +464,13 @@ def extract_resume_text(uploaded_file):
 # ============================================================
 
 def generate_question():
-    """Generate one personalized interview question."""
 
     client = get_groq_client()
 
     if client is None:
         st.error(
             "⚠️ Groq API key is missing. "
-            "Add GROQ_API_KEY in Streamlit Cloud Secrets."
+            "Please configure GROQ_API_KEY."
         )
         return None
 
@@ -575,65 +478,57 @@ def generate_question():
 
     role = config.get(
         "job_role",
-        "Software Engineer",
+        "Software Engineer"
     )
 
     interview_type = config.get(
         "interview_type",
-        "Technical Interview",
+        "Technical Interview"
     )
 
     difficulty = config.get(
         "difficulty",
-        "Intermediate",
+        "Intermediate"
     )
 
     experience = config.get(
         "experience",
-        "Fresher",
+        "Fresher"
     )
 
-    previous_questions = st.session_state.questions
-
-    previous_text = "\n".join(
-        previous_questions[-5:]
+    previous = "\n".join(
+        st.session_state.questions[-5:]
     )
 
-    resume_context = st.session_state.get(
+    resume = st.session_state.get(
         "resume_text",
-        "",
-    )
-
-    resume_context = resume_context[:5000]
+        ""
+    )[:5000]
 
     prompt = f"""
-You are a professional AI interviewer.
+You are a professional technical interviewer.
 
 Generate ONE interview question.
 
-Candidate profile:
 Job Role: {role}
 Interview Type: {interview_type}
 Difficulty: {difficulty}
 Experience: {experience}
 
 Previous questions:
-{previous_text if previous_text else "None"}
+{previous if previous else "None"}
 
-Resume information:
-{resume_context if resume_context else "No resume provided."}
+Resume:
+{resume if resume else "No resume provided"}
 
 Rules:
 - Generate exactly ONE question.
-- Match the job role.
-- Match the interview type.
-- Match the difficulty.
 - Do not repeat previous questions.
-- Technical interviews should test practical technical knowledge.
-- HR interviews should test professional communication.
-- Behavioral interviews should use realistic scenarios.
-- Mixed interviews should vary appropriately.
-- Keep it clear and interview-ready.
+- Match the selected role.
+- Match the selected interview type.
+- Match the difficulty.
+- Make it realistic.
+- Keep it concise.
 - Return ONLY the question.
 """
 
@@ -646,7 +541,7 @@ Rules:
                     "role": "system",
                     "content": (
                         "You are an expert interviewer. "
-                        "Return only one interview question."
+                        "Return exactly one question."
                     ),
                 },
                 {
@@ -658,19 +553,13 @@ Rules:
             max_tokens=300,
         )
 
-        question = (
+        result = (
             response.choices[0]
             .message.content
             .strip()
         )
 
-        if not question:
-            st.error(
-                "⚠️ AI returned an empty question."
-            )
-            return None
-
-        return question
+        return result if result else None
 
     except Exception as e:
 
@@ -686,7 +575,6 @@ Rules:
 # ============================================================
 
 def evaluate_answer(question, answer):
-    """Evaluate an interview answer with AI."""
 
     client = get_groq_client()
 
@@ -700,32 +588,25 @@ def evaluate_answer(question, answer):
 
     role = config.get(
         "job_role",
-        "Software Engineer",
+        "Software Engineer"
     )
 
     interview_type = config.get(
         "interview_type",
-        "Technical Interview",
+        "Technical Interview"
     )
 
     difficulty = config.get(
         "difficulty",
-        "Intermediate",
-    )
-
-    experience = config.get(
-        "experience",
-        "Fresher",
+        "Intermediate"
     )
 
     prompt = f"""
-Evaluate this interview answer fairly.
+Evaluate the candidate's interview answer.
 
-Candidate:
 Role: {role}
 Interview Type: {interview_type}
 Difficulty: {difficulty}
-Experience: {experience}
 
 Question:
 {question}
@@ -733,9 +614,7 @@ Question:
 Candidate Answer:
 {answer}
 
-Give scores from 0 to 10.
-
-Return ONLY valid JSON:
+Return ONLY valid JSON using exactly this structure:
 
 {{
     "score": 8,
@@ -745,28 +624,19 @@ Return ONLY valid JSON:
     "communication": 8,
     "confidence": 8,
     "strengths": [
-        "Strength 1",
-        "Strength 2"
+        "Strength"
     ],
     "improvements": [
-        "Improvement 1",
-        "Improvement 2"
+        "Improvement"
     ],
-    "better_answer": "Example of a stronger answer.",
+    "better_answer": "A stronger example answer.",
     "concepts_to_review": [
-        "Concept 1",
-        "Concept 2"
+        "Concept"
     ]
 }}
 
-Rules:
-- All numeric scores must be 0-10.
-- Strengths must be a list.
-- Improvements must be a list.
-- Concepts must be a list.
-- Better answer must be a string.
-- Be fair to a fresher.
-- Do not invent achievements.
+Scores must be between 0 and 10.
+Be fair to a fresher.
 """
 
     try:
@@ -799,11 +669,11 @@ Rules:
         if result.startswith("```"):
             result = result.replace(
                 "```json",
-                "",
+                ""
             )
             result = result.replace(
                 "```",
-                "",
+                ""
             )
             result = result.strip()
 
@@ -821,19 +691,18 @@ Rules:
         for field in numeric_fields:
 
             try:
-
                 value = int(
                     float(
                         evaluation.get(
                             field,
-                            0,
+                            0
                         )
                     )
                 )
 
                 evaluation[field] = max(
                     0,
-                    min(10, value),
+                    min(10, value)
                 )
 
             except Exception:
@@ -848,22 +717,16 @@ Rules:
 
             if not isinstance(
                 evaluation.get(field),
-                list,
+                list
             ):
                 evaluation[field] = []
-
-        if not isinstance(
-            evaluation.get("better_answer"),
-            str,
-        ):
-            evaluation["better_answer"] = ""
 
         return evaluation
 
     except json.JSONDecodeError:
 
         st.error(
-            "⚠️ AI returned an invalid evaluation format."
+            "⚠️ AI returned invalid JSON."
         )
 
         return None
@@ -871,7 +734,7 @@ Rules:
     except Exception as e:
 
         st.error(
-            f"⚠️ Error evaluating answer: {e}"
+            f"⚠️ Evaluation error: {e}"
         )
 
         return None
@@ -889,102 +752,64 @@ def generate_final_report():
 
         return {
             "overall_score": 0,
-            "technical_knowledge": 0,
+            "technical": 0,
             "communication": 0,
             "problem_solving": 0,
             "relevance": 0,
             "confidence": 0,
         }
 
+    overall = mean(
+        e.get("score", 0)
+        for e in evaluations
+    )
+
     technical = mean(
-        [
-            e.get(
-                "technical_knowledge",
-                0,
-            )
-            for e in evaluations
-        ]
+        e.get("technical_knowledge", 0)
+        for e in evaluations
     )
 
     communication = mean(
-        [
-            e.get(
-                "communication",
-                0,
-            )
-            for e in evaluations
-        ]
+        e.get("communication", 0)
+        for e in evaluations
     )
 
     relevance = mean(
-        [
-            e.get(
-                "relevance",
-                0,
-            )
-            for e in evaluations
-        ]
+        e.get("relevance", 0)
+        for e in evaluations
     )
 
     confidence = mean(
-        [
-            e.get(
-                "confidence",
-                0,
-            )
-            for e in evaluations
-        ]
+        e.get("confidence", 0)
+        for e in evaluations
     )
 
-    correctness = mean(
-        [
-            e.get(
-                "correctness",
-                0,
-            )
-            for e in evaluations
-        ]
-    )
-
-    overall = mean(
-        [
-            e.get(
-                "score",
-                0,
-            )
-            for e in evaluations
-        ]
+    problem_solving = mean(
+        e.get("correctness", 0)
+        for e in evaluations
     )
 
     return {
-        "overall_score": round(
-            overall * 10
-        ),
-        "technical_knowledge": round(
-            technical,
-            1,
-        ),
-        "communication": round(
-            communication,
-            1,
-        ),
+        "overall_score": round(overall * 10),
+        "technical": round(technical, 1),
+        "communication": round(communication, 1),
         "problem_solving": round(
-            correctness,
-            1,
+            problem_solving,
+            1
         ),
         "relevance": round(
             relevance,
-            1,
+            1
         ),
         "confidence": round(
             confidence,
-            1,
+            1
         ),
     }
 
 
 # ============================================================
-# RESET INTERVIEW
+# RESET
 # ============================================================
 
 def reset_interview():
@@ -998,7 +823,6 @@ def reset_interview():
 
     st.session_state.interview_started = False
     st.session_state.interview_finished = False
-
     st.session_state.result_counted = False
 
 
@@ -1012,63 +836,44 @@ def show_sidebar():
 
         st.markdown(
             """
-            <div style="
-                text-align:center;
-                padding:10px 0 20px 0;
-            ">
+            <div class="sidebar-logo">
 
-                <div style="
-                    font-size:48px;
-                ">
+                <div class="sidebar-logo-icon">
                     🤖
                 </div>
 
-                <div style="
-                    font-size:22px;
-                    font-weight:800;
-                    color:white;
-                ">
+                <div class="sidebar-logo-title">
                     AI Interview
                 </div>
 
-                <div style="
-                    font-size:14px;
-                    color:#9ca3af;
-                    margin-top:4px;
-                ">
+                <div class="sidebar-logo-subtitle">
                     Simulator
                 </div>
 
             </div>
             """,
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
 
-        st.markdown("---")
-
-        st.markdown(
-            "### 🧭 Navigation"
-        )
+        st.divider()
 
         if st.button(
-            "🏠 Dashboard",
-            use_container_width=True,
+            "🏠  Home",
+            use_container_width=True
         ):
-
-            st.session_state.page = "Dashboard"
+            st.session_state.page = "Home"
             st.rerun()
 
         if st.button(
-            "⚙️ Interview Setup",
-            use_container_width=True,
+            "⚙️  Interview Setup",
+            use_container_width=True
         ):
-
             st.session_state.page = "Interview Setup"
             st.rerun()
 
         if st.button(
-            "🎤 Mock Interview",
-            use_container_width=True,
+            "🎤  Mock Interview",
+            use_container_width=True
         ):
 
             if st.session_state.interview_started:
@@ -1079,90 +884,104 @@ def show_sidebar():
             st.rerun()
 
         if st.button(
-            "📊 Results",
-            use_container_width=True,
+            "📊  Results",
+            use_container_width=True
         ):
-
             st.session_state.page = "Results"
             st.rerun()
 
         if st.button(
-            "📚 Interview History",
-            use_container_width=True,
+            "📚  History",
+            use_container_width=True
         ):
-
-            st.session_state.page = "Interview History"
+            st.session_state.page = "History"
             st.rerun()
 
         if st.button(
-            "ℹ️ About",
-            use_container_width=True,
+            "ℹ️  About",
+            use_container_width=True
         ):
-
             st.session_state.page = "About"
             st.rerun()
 
-        st.markdown("---")
+        st.divider()
 
-        st.markdown(
-            """
-            <div style="
-                background:#1f2937;
-                padding:14px;
-                border-radius:12px;
-            ">
-
-                <div style="
-                    font-weight:700;
-                    color:white;
-                ">
-                    🚀 AI Practice
-                </div>
-
-                <div style="
-                    font-size:13px;
-                    color:#9ca3af;
-                    margin-top:5px;
-                    line-height:1.5;
-                ">
-                    Practice interviews, receive AI feedback,
-                    and improve your confidence.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True,
+        st.caption(
+            "🚀 Practice smarter with AI"
         )
 
 
 # ============================================================
-# DASHBOARD
+# HOME / FRONT PAGE
 # ============================================================
 
-def show_dashboard():
+def show_home():
 
+    # HERO
     st.markdown(
         """
-        <div class="hero-card">
+        <div class="hero">
 
-            <div class="hero-title">
-                🤖 AI Interview Simulator
+            <div class="hero-badge">
+                ✨ AI-POWERED INTERVIEW PRACTICE
             </div>
 
-            <div class="hero-subtitle">
+            <h1>
+                Ace Your Next<br>
+                Interview with AI 🤖
+            </h1>
+
+            <h2>
                 Practice. Improve. Get Interview-Ready.
-            </div>
+            </h2>
 
-            <div class="hero-description">
-                Practice realistic interviews with an AI interviewer,
-                receive detailed feedback, discover weak areas,
-                and improve your interview performance.
-            </div>
+            <p>
+                Simulate realistic technical, HR and behavioral
+                interviews with an AI interviewer. Get instant
+                feedback, detailed scoring and personalized
+                improvement suggestions.
+            </p>
 
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
+
+    # CTA
+    col1, col2, col3 = st.columns([1, 1.3, 1])
+
+    with col2:
+
+        st.markdown(
+            '<div class="primary-btn">',
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "🚀 Start Your Free Interview",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Interview Setup"
+            st.rerun()
+
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+    # STATS
+    st.markdown(
+        '<div class="section-title">Your Progress</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="section-subtitle">Track your interview preparation journey.</div>',
+        unsafe_allow_html=True
+    )
+
+    completed = st.session_state.interview_count
 
     total_questions = sum(
         len(item.get("questions", []))
@@ -1171,149 +990,236 @@ def show_dashboard():
 
     if st.session_state.scores:
 
-        avg_score = round(
-            mean(
-                st.session_state.scores
-            ) * 10
+        average = round(
+            mean(st.session_state.scores) * 10
         )
 
     else:
 
-        avg_score = 0
+        average = 0
 
-    improvement_count = 0
+    cols = st.columns(4)
 
-    for evaluation in st.session_state.evaluations:
+    stats = [
+        ("🎯", completed, "Interviews Completed"),
+        ("📝", total_questions, "Questions Practiced"),
+        ("⭐", f"{average}%", "Average Score"),
+        ("🚀", "∞", "Room to Improve"),
+    ]
 
-        improvement_count += len(
-            evaluation.get(
-                "improvements",
-                [],
+    for col, data in zip(cols, stats):
+
+        with col:
+
+            icon, number, label = data
+
+            st.markdown(
+                f"""
+                <div class="stat-card">
+
+                    <div style="font-size:25px;">
+                        {icon}
+                    </div>
+
+                    <div class="stat-number">
+                        {number}
+                    </div>
+
+                    <div class="stat-label">
+                        {label}
+                    </div>
+
+                </div>
+                """,
+                unsafe_allow_html=True
             )
-        )
 
-    col1, col2, col3, col4 = st.columns(4)
+    # FEATURES
+    st.markdown(
+        '<div class="section-title">Everything You Need to Improve</div>',
+        unsafe_allow_html=True
+    )
 
-    with col1:
+    st.markdown(
+        '<div class="section-subtitle">A complete AI-powered interview preparation experience.</div>',
+        unsafe_allow_html=True
+    )
 
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-number">
-                    {total_questions}
+    features = [
+        (
+            "🤖",
+            "AI Interviewer",
+            "Get realistic questions generated specifically for your target role."
+        ),
+        (
+            "🧠",
+            "Smart Evaluation",
+            "Receive detailed AI feedback on every answer you provide."
+        ),
+        (
+            "📊",
+            "Performance Analytics",
+            "Understand your technical knowledge, communication and confidence."
+        ),
+        (
+            "📄",
+            "Resume-Based Questions",
+            "Upload your resume and practice questions related to your profile."
+        ),
+        (
+            "🎯",
+            "Multiple Interview Types",
+            "Practice Technical, HR, Behavioral or Mixed interviews."
+        ),
+        (
+            "📈",
+            "Personalized Improvement",
+            "Discover weak areas and get concepts to review."
+        ),
+    ]
+
+    for row in range(0, len(features), 3):
+
+        cols = st.columns(3)
+
+        for col, feature in zip(
+            cols,
+            features[row:row + 3]
+        ):
+
+            icon, title, text = feature
+
+            with col:
+
+                st.markdown(
+                    f"""
+                    <div class="feature-card">
+
+                        <div class="feature-icon">
+                            {icon}
+                        </div>
+
+                        <div class="feature-title">
+                            {title}
+                        </div>
+
+                        <div class="feature-text">
+                            {text}
+                        </div>
+
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+    # HOW IT WORKS
+    st.markdown(
+        '<div class="section-title">How It Works</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="section-subtitle">Start practicing in three simple steps.</div>',
+        unsafe_allow_html=True
+    )
+
+    cols = st.columns(3)
+
+    steps = [
+        (
+            "01",
+            "Configure",
+            "Choose your role, interview type, difficulty and experience."
+        ),
+        (
+            "02",
+            "Practice",
+            "Answer AI-generated interview questions like a real interview."
+        ),
+        (
+            "03",
+            "Improve",
+            "Review your score, strengths and personalized feedback."
+        ),
+    ]
+
+    for col, step in zip(cols, steps):
+
+        with col:
+
+            number, title, text = step
+
+            st.markdown(
+                f"""
+                <div class="feature-card">
+
+                    <div style="
+                        color:#4f46e5;
+                        font-size:14px;
+                        font-weight:800;
+                    ">
+                        STEP {number}
+                    </div>
+
+                    <div class="feature-title">
+                        {title}
+                    </div>
+
+                    <div class="feature-text">
+                        {text}
+                    </div>
+
                 </div>
-                <div class="stat-label">
-                    Interview Questions
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True
+            )
+
+    # FINAL CTA
+    st.markdown(
+        "<br>",
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <div class="hero" style="text-align:center; padding:40px;">
+
+            <h1 style="font-size:32px !important;">
+                Ready to Practice? 🎤
+            </h1>
+
+            <p style="
+                margin-left:auto;
+                margin-right:auto;
+            ">
+                Turn interview anxiety into interview confidence.
+            </p>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    col1, col2, col3 = st.columns([1, 1.3, 1])
 
     with col2:
 
         st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-number">
-                    {avg_score}%
-                </div>
-                <div class="stat-label">
-                    Average Score
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col3:
-
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-number">
-                    {st.session_state.interview_count}
-                </div>
-                <div class="stat-label">
-                    Interviews Completed
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col4:
-
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-number">
-                    {improvement_count}
-                </div>
-                <div class="stat-label">
-                    Improvement Areas
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("")
-
-    col1, col2 = st.columns([1.3, 1])
-
-    with col1:
-
-        st.markdown(
-            """
-            <div class="custom-card">
-
-                <div class="card-title">
-                    🎯 Prepare for Your Next Interview
-                </div>
-
-                <div class="card-text">
-                    Choose your job role, interview type,
-                    difficulty level, experience, and number
-                    of questions. The AI interviewer will
-                    generate personalized questions for you.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True,
+            '<div class="primary-btn">',
+            unsafe_allow_html=True
         )
 
         if st.button(
-            "🚀 Start Your First Interview",
-            use_container_width=True,
+            "🎤 Begin Interview Practice",
+            use_container_width=True
         ):
 
             st.session_state.page = "Interview Setup"
             st.rerun()
 
-    with col2:
-
         st.markdown(
-            """
-            <div class="custom-card">
-
-                <div class="card-title">
-                    ✨ What You Get
-                </div>
-
-                <div class="card-text">
-                    • AI-generated interview questions<br>
-                    • Detailed answer evaluation<br>
-                    • Technical and communication scores<br>
-                    • Strengths and improvement areas<br>
-                    • Better answer suggestions<br>
-                    • Interview performance report
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True,
+            "</div>",
+            unsafe_allow_html=True
         )
 
 
@@ -1325,43 +1231,46 @@ def show_interview_setup():
 
     st.title("⚙️ Interview Setup")
 
-    st.markdown(
-        "Customize your interview before you begin."
+    st.caption(
+        "Customize your AI interview before you begin."
     )
 
-    st.markdown("---")
+    st.divider()
 
-    col1, col2 = st.columns(2)
+    left, right = st.columns(2)
 
-    with col1:
+    with left:
 
-        job_roles = [
-            "Software Engineer",
-            "Python Developer",
-            "AI Engineer",
-            "Machine Learning Engineer",
-            "Data Scientist",
-            "Data Analyst",
-            "Web Developer",
-            "Frontend Developer",
-            "Backend Developer",
-            "Cybersecurity Analyst",
-            "Computer Science Student",
-            "Custom Role",
-        ]
+        st.markdown(
+            '<div class="setup-card">',
+            unsafe_allow_html=True
+        )
+
+        st.subheader("🎯 Interview Preferences")
 
         job_role = st.selectbox(
             "💼 Job Role",
-            job_roles,
+            [
+                "Software Engineer",
+                "Python Developer",
+                "AI Engineer",
+                "Machine Learning Engineer",
+                "Data Scientist",
+                "Data Analyst",
+                "Web Developer",
+                "Frontend Developer",
+                "Backend Developer",
+                "Cybersecurity Analyst",
+                "Computer Science Student",
+                "Custom Role",
+            ]
         )
 
         if job_role == "Custom Role":
 
             job_role = st.text_input(
-                "Enter your custom job role",
-                placeholder=(
-                    "e.g. Generative AI Engineer"
-                ),
+                "Enter your role",
+                placeholder="e.g. Generative AI Engineer"
             )
 
         interview_type = st.selectbox(
@@ -1371,7 +1280,7 @@ def show_interview_setup():
                 "HR Interview",
                 "Behavioral Interview",
                 "Mixed Interview",
-            ],
+            ]
         )
 
         difficulty = st.selectbox(
@@ -1381,24 +1290,36 @@ def show_interview_setup():
                 "Intermediate",
                 "Advanced",
                 "Expert",
-            ],
+            ]
         )
 
-    with col2:
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+    with right:
+
+        st.markdown(
+            '<div class="setup-card">',
+            unsafe_allow_html=True
+        )
+
+        st.subheader("👨‍💻 Candidate Profile")
 
         number_questions = st.selectbox(
             "🔢 Number of Questions",
-            [5, 10, 15],
+            [5, 10, 15]
         )
 
         experience = st.selectbox(
-            "👨‍💻 Experience Level",
+            "💼 Experience Level",
             [
                 "Fresher",
                 "0–1 Years",
                 "1–3 Years",
                 "3+ Years",
-            ],
+            ]
         )
 
         st.markdown(
@@ -1407,10 +1328,10 @@ def show_interview_setup():
 
         resume_file = st.file_uploader(
             "Upload your resume PDF",
-            type=["pdf"],
+            type=["pdf"]
         )
 
-        if resume_file is not None:
+        if resume_file:
 
             if (
                 st.session_state.resume_name
@@ -1418,198 +1339,70 @@ def show_interview_setup():
             ):
 
                 with st.spinner(
-                    "Reading your resume..."
+                    "Reading resume..."
                 ):
 
-                    resume_text = (
-                        extract_resume_text(
-                            resume_file
-                        )
+                    text = extract_resume_text(
+                        resume_file
                     )
 
-                st.session_state.resume_text = (
-                    resume_text
+                st.session_state.resume_text = text
+                st.session_state.resume_name = resume_file.name
+
+            if st.session_state.resume_text:
+
+                st.success(
+                    "✅ Resume loaded successfully."
                 )
 
-                st.session_state.resume_name = (
-                    resume_file.name
-                )
-
-                if resume_text:
-
-                    st.success(
-                        "✅ Resume successfully loaded."
-                    )
-
-    st.markdown("---")
-
-    st.markdown(
-        """
-        <div class="custom-card">
-
-            <div class="card-title">
-                💡 Interview Configuration
-            </div>
-
-            <div class="card-text">
-                Your AI interviewer will generate questions
-                based on your selected role, interview type,
-                difficulty level, experience level, and
-                optional resume.
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if st.button(
-        "🚀 Start Interview",
-        use_container_width=True,
-    ):
-
-        if not job_role.strip():
-
-            st.warning(
-                "⚠️ Please enter a job role."
-            )
-
-            return
-
-        reset_interview()
-
-        st.session_state.interview_config = {
-            "job_role": job_role,
-            "interview_type": interview_type,
-            "difficulty": difficulty,
-            "number_questions": number_questions,
-            "experience": experience,
-        }
-
-        st.session_state.interview_started = True
-
-        st.session_state.page = "Mock Interview"
-
-        st.rerun()
-
-
-# ============================================================
-# AI EVALUATION DISPLAY
-# ============================================================
-
-def show_evaluation(evaluation):
-
-    st.markdown("### 🧠 AI Evaluation")
-
-    score = evaluation.get(
-        "score",
-        0,
-    )
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-    with col1:
-        st.metric(
-            "Score",
-            f"{score}/10",
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
         )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
-        st.metric(
-            "Correctness",
-            f"{evaluation.get('correctness', 0)}/10",
+
+        st.markdown(
+            '<div class="primary-btn">',
+            unsafe_allow_html=True
         )
 
-    with col3:
-        st.metric(
-            "Relevance",
-            f"{evaluation.get('relevance', 0)}/10",
-        )
-
-    with col4:
-        st.metric(
-            "Technical",
-            f"{evaluation.get('technical_knowledge', 0)}/10",
-        )
-
-    with col5:
-        st.metric(
-            "Communication",
-            f"{evaluation.get('communication', 0)}/10",
-        )
-
-    with col6:
-        st.metric(
-            "Confidence",
-            f"{evaluation.get('confidence', 0)}/10",
-        )
-
-    strengths = evaluation.get(
-        "strengths",
-        [],
-    )
-
-    improvements = evaluation.get(
-        "improvements",
-        [],
-    )
-
-    concepts = evaluation.get(
-        "concepts_to_review",
-        [],
-    )
-
-    better_answer = evaluation.get(
-        "better_answer",
-        "",
-    )
-
-    if strengths:
-
-        with st.expander(
-            "💪 Strengths",
-            expanded=True,
+        if st.button(
+            "🚀 Start AI Interview",
+            use_container_width=True
         ):
 
-            for item in strengths:
-                st.markdown(
-                    f"• {item}"
+            if not job_role.strip():
+
+                st.warning(
+                    "Please enter a job role."
                 )
 
-    if improvements:
+                return
 
-        with st.expander(
-            "📈 Areas to Improve",
-            expanded=True,
-        ):
+            reset_interview()
 
-            for item in improvements:
-                st.markdown(
-                    f"• {item}"
-                )
+            st.session_state.interview_config = {
+                "job_role": job_role,
+                "interview_type": interview_type,
+                "difficulty": difficulty,
+                "number_questions": number_questions,
+                "experience": experience,
+            }
 
-    if better_answer:
+            st.session_state.interview_started = True
+            st.session_state.page = "Mock Interview"
 
-        with st.expander(
-            "✨ Better Answer",
-            expanded=False,
-        ):
+            st.rerun()
 
-            st.write(
-                better_answer
-            )
-
-    if concepts:
-
-        with st.expander(
-            "📚 Concepts to Review",
-            expanded=False,
-        ):
-
-            for item in concepts:
-                st.markdown(
-                    f"• {item}"
-                )
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
+        )
 
 
 # ============================================================
@@ -1621,41 +1414,35 @@ def show_mock_interview():
     if not st.session_state.interview_started:
 
         st.warning(
-            "Please configure your interview first."
+            "Please start an interview first."
         )
 
         if st.button(
-            "⚙️ Go to Interview Setup",
-            use_container_width=True,
+            "⚙️ Go to Setup",
+            use_container_width=True
         ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
         return
 
     config = st.session_state.interview_config
 
-    total_questions = config.get(
+    total = config.get(
         "number_questions",
-        5,
+        5
     )
 
-    current_index = (
-        st.session_state.current_question
-    )
+    current = st.session_state.current_question
 
-    if current_index >= total_questions:
+    if current >= total:
 
         st.session_state.interview_finished = True
 
         if not st.session_state.result_counted:
 
             st.session_state.interview_count += 1
-
             st.session_state.result_counted = True
 
             report = generate_final_report()
@@ -1664,20 +1451,17 @@ def show_mock_interview():
                 {
                     "role": config.get(
                         "job_role",
-                        "Unknown",
+                        "Unknown"
                     ),
                     "type": config.get(
                         "interview_type",
-                        "Unknown",
+                        "Unknown"
                     ),
                     "difficulty": config.get(
                         "difficulty",
-                        "Unknown",
+                        "Unknown"
                     ),
-                    "score": report.get(
-                        "overall_score",
-                        0,
-                    ),
+                    "score": report["overall_score"],
                     "questions": list(
                         st.session_state.questions
                     ),
@@ -1691,48 +1475,23 @@ def show_mock_interview():
             )
 
         st.session_state.page = "Results"
-
         st.rerun()
-
         return
-
-    # --------------------------------------------------------
-    # HEADER
-    # --------------------------------------------------------
 
     st.title("🎤 Mock Interview")
 
-    st.markdown(
-        f"""
-        **{config.get('job_role', 'Software Engineer')}**
-        &nbsp; • &nbsp;
-        {config.get('interview_type', 'Technical Interview')}
-        &nbsp; • &nbsp;
-        {config.get('difficulty', 'Intermediate')}
-        """
-    )
-
-    progress_value = (
-        (current_index + 1)
-        / total_questions
+    st.caption(
+        f"{config.get('job_role')} • "
+        f"{config.get('interview_type')} • "
+        f"{config.get('difficulty')}"
     )
 
     st.progress(
-        progress_value,
-        text=(
-            f"Question {current_index + 1} "
-            f"of {total_questions}"
-        ),
+        (current + 1) / total,
+        text=f"Question {current + 1} of {total}"
     )
 
-    # --------------------------------------------------------
-    # GENERATE QUESTION
-    # --------------------------------------------------------
-
-    if (
-        len(st.session_state.questions)
-        <= current_index
-    ):
+    if len(st.session_state.questions) <= current:
 
         with st.spinner(
             "🤖 AI interviewer is preparing your question..."
@@ -1740,62 +1499,52 @@ def show_mock_interview():
 
             question = generate_question()
 
-        if question:
-
-            st.session_state.questions.append(
-                question
-            )
-
-        else:
-
+        if not question:
             return
 
-    question = st.session_state.questions[
-        current_index
-    ]
+        st.session_state.questions.append(
+            question
+        )
 
-    # --------------------------------------------------------
-    # QUESTION CARD
-    # --------------------------------------------------------
+    question = st.session_state.questions[current]
 
     st.markdown(
         f"""
-        <div class="interviewer-card">
+        <div class="interview-card">
 
             <div class="ai-badge">
                 🤖 AI INTERVIEWER
             </div>
 
-            <div class="card-title">
-                Question {current_index + 1}
+            <div style="
+                margin-top:15px;
+                font-size:14px;
+                color:#667085;
+                font-weight:600;
+            ">
+                QUESTION {current + 1}
             </div>
 
-            <div class="question-box">
+            <div class="question">
                 {question}
             </div>
 
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
-    # --------------------------------------------------------
-    # ANSWER
-    # --------------------------------------------------------
-
-    st.markdown(
-        "### 📝 Your Answer"
-    )
+    st.markdown("### 📝 Your Answer")
 
     answer = st.text_area(
-        "Write your answer below",
+        "Answer",
         height=220,
         placeholder=(
-            "Type your answer as if you were "
-            "speaking to a real interviewer..."
+            "Write your answer as if you are speaking "
+            "to a real interviewer..."
         ),
-        key=f"answer_{current_index}",
         label_visibility="collapsed",
+        key=f"answer_{current}"
     )
 
     col1, col2 = st.columns(2)
@@ -1804,26 +1553,22 @@ def show_mock_interview():
 
         submit = st.button(
             "✅ Submit Answer",
-            use_container_width=True,
+            use_container_width=True
         )
 
     with col2:
 
         skip = st.button(
             "⏭️ Skip Question",
-            use_container_width=True,
+            use_container_width=True
         )
-
-    # --------------------------------------------------------
-    # SUBMIT ANSWER
-    # --------------------------------------------------------
 
     if submit:
 
         if not answer.strip():
 
             st.warning(
-                "⚠️ Please write an answer before submitting."
+                "Please write an answer first."
             )
 
         else:
@@ -1834,15 +1579,10 @@ def show_mock_interview():
 
                 evaluation = evaluate_answer(
                     question,
-                    answer,
+                    answer
                 )
 
             if evaluation:
-
-                score = evaluation.get(
-                    "score",
-                    0,
-                )
 
                 st.session_state.answers.append(
                     answer
@@ -1853,16 +1593,15 @@ def show_mock_interview():
                 )
 
                 st.session_state.scores.append(
-                    score
+                    evaluation.get(
+                        "score",
+                        0
+                    )
                 )
 
                 st.session_state.current_question += 1
 
                 st.rerun()
-
-    # --------------------------------------------------------
-    # SKIP QUESTION
-    # --------------------------------------------------------
 
     if skip:
 
@@ -1870,7 +1609,7 @@ def show_mock_interview():
             "[Question skipped]"
         )
 
-        skipped_evaluation = {
+        evaluation = {
             "score": 0,
             "correctness": 0,
             "relevance": 0,
@@ -1879,14 +1618,14 @@ def show_mock_interview():
             "confidence": 0,
             "strengths": [],
             "improvements": [
-                "Try to answer every interview question."
+                "Try to answer every question."
             ],
             "better_answer": "",
             "concepts_to_review": [],
         }
 
         st.session_state.evaluations.append(
-            skipped_evaluation
+            evaluation
         )
 
         st.session_state.scores.append(0)
@@ -1902,88 +1641,59 @@ def show_mock_interview():
 
 def show_results():
 
-    st.title(
-        "🎯 Interview Complete!"
-    )
+    st.title("🎯 Interview Complete!")
 
     if not st.session_state.evaluations:
 
         st.info(
-            "No interview results are available yet."
+            "Complete an interview to see your results."
         )
 
         if st.button(
-            "🚀 Start an Interview",
-            use_container_width=True,
+            "🚀 Start Interview",
+            use_container_width=True
         ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
         return
 
     report = generate_final_report()
 
-    overall = report["overall_score"]
+    score = report["overall_score"]
 
-    if overall >= 90:
-
+    if score >= 90:
         level = "Excellent 🏆"
+        message = "Outstanding interview performance!"
 
-        message = (
-            "Outstanding performance! "
-            "You are showing strong interview readiness."
-        )
-
-    elif overall >= 80:
-
+    elif score >= 80:
         level = "Very Good 🌟"
+        message = "Great job! Keep polishing your skills."
 
-        message = (
-            "Great performance! "
-            "A little more practice can make you even stronger."
-        )
-
-    elif overall >= 70:
-
+    elif score >= 70:
         level = "Good 👍"
-
-        message = (
-            "Good foundation. "
-            "Focus on your improvement areas."
-        )
+        message = "Good foundation. Keep practicing."
 
     else:
-
         level = "Needs Improvement 📈"
-
-        message = (
-            "Keep practicing. "
-            "Every interview is an opportunity to improve."
-        )
-
-    # --------------------------------------------------------
-    # SCORE HERO
-    # --------------------------------------------------------
+        message = "Keep practicing and focus on your weak areas."
 
     st.markdown(
         f"""
-        <div class="hero-card" style="text-align:center;">
+        <div class="hero" style="text-align:center;">
 
             <div style="
-                font-size:4rem;
-                font-weight:800;
+                font-size:64px;
+                font-weight:900;
                 color:white;
             ">
-                {overall}/100
+                {score}/100
             </div>
 
             <div style="
-                font-size:1.5rem;
-                font-weight:700;
+                font-size:25px;
+                font-weight:800;
                 color:white;
             ">
                 {level}
@@ -1991,91 +1701,79 @@ def show_results():
 
             <div style="
                 color:#e0e7ff;
-                margin-top:8px;
+                margin-top:10px;
             ">
                 {message}
             </div>
 
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
-    # --------------------------------------------------------
-    # PERFORMANCE
-    # --------------------------------------------------------
+    st.subheader("📊 Performance Breakdown")
 
-    st.subheader(
-        "📊 Performance Breakdown"
-    )
+    cols = st.columns(5)
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-
-        st.metric(
-            "Technical Knowledge",
-            f"{report['technical_knowledge']}/10",
-        )
-
-    with col2:
-
-        st.metric(
+    metrics = [
+        (
+            "Technical",
+            report["technical"]
+        ),
+        (
             "Communication",
-            f"{report['communication']}/10",
-        )
-
-    with col3:
-
-        st.metric(
+            report["communication"]
+        ),
+        (
             "Problem Solving",
-            f"{report['problem_solving']}/10",
-        )
-
-    with col4:
-
-        st.metric(
+            report["problem_solving"]
+        ),
+        (
             "Relevance",
-            f"{report['relevance']}/10",
-        )
-
-    with col5:
-
-        st.metric(
+            report["relevance"]
+        ),
+        (
             "Confidence",
-            f"{report['confidence']}/10",
-        )
+            report["confidence"]
+        ),
+    ]
 
-    # --------------------------------------------------------
-    # FEEDBACK
-    # --------------------------------------------------------
+    for col, (label, value) in zip(
+        cols,
+        metrics
+    ):
+
+        with col:
+
+            st.metric(
+                label,
+                f"{value}/10"
+            )
 
     strengths = []
     improvements = []
     concepts = []
 
-    for evaluation in (
-        st.session_state.evaluations
-    ):
+    for evaluation in st.session_state.evaluations:
 
         strengths.extend(
             evaluation.get(
                 "strengths",
-                [],
+                []
             )
         )
 
         improvements.extend(
             evaluation.get(
                 "improvements",
-                [],
+                []
             )
         )
 
         concepts.extend(
             evaluation.get(
                 "concepts_to_review",
-                [],
+                []
             )
         )
 
@@ -2083,133 +1781,80 @@ def show_results():
 
     with col1:
 
-        st.markdown(
-            """
-            <div class="custom-card">
+        st.subheader("💪 Strengths")
 
-                <div class="card-title">
-                    💪 Your Strengths
-                </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        unique_strengths = list(
+        unique = list(
             dict.fromkeys(strengths)
         )
 
-        if unique_strengths:
+        if unique:
 
-            for item in unique_strengths[:8]:
-
-                st.markdown(
-                    f"✅ {item}"
-                )
+            for item in unique[:8]:
+                st.success(item)
 
         else:
-
-            st.write(
-                "Complete more answers to identify your strengths."
+            st.info(
+                "Keep practicing to identify your strengths."
             )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True,
-        )
 
     with col2:
 
-        st.markdown(
-            """
-            <div class="custom-card">
+        st.subheader("📈 Improvement Areas")
 
-                <div class="card-title">
-                    📈 Areas to Improve
-                </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        unique_improvements = list(
+        unique = list(
             dict.fromkeys(improvements)
         )
 
-        if unique_improvements:
+        if unique:
 
-            for item in unique_improvements[:8]:
-
-                st.markdown(
-                    f"🔹 {item}"
-                )
+            for item in unique[:8]:
+                st.warning(item)
 
         else:
 
-            st.write(
-                "No major improvement areas identified."
+            st.info(
+                "No major improvement areas found."
             )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True,
-        )
-
-    # --------------------------------------------------------
-    # CONCEPTS
-    # --------------------------------------------------------
 
     if concepts:
 
-        st.subheader(
-            "📚 Concepts to Review"
-        )
+        st.subheader("📚 Concepts to Review")
 
-        unique_concepts = list(
+        for concept in list(
             dict.fromkeys(concepts)
-        )
-
-        for concept in unique_concepts[:12]:
+        )[:12]:
 
             st.markdown(
                 f"• {concept}"
             )
 
-    # --------------------------------------------------------
-    # QUESTION REVIEW
-    # --------------------------------------------------------
-
     st.subheader(
         "📝 Question-by-Question Review"
     )
 
-    for index, question in enumerate(
+    for i, question in enumerate(
         st.session_state.questions
     ):
 
         evaluation = (
-            st.session_state.evaluations[index]
-            if index
-            < len(
+            st.session_state.evaluations[i]
+            if i < len(
                 st.session_state.evaluations
             )
             else {}
         )
 
         answer = (
-            st.session_state.answers[index]
-            if index
-            < len(
+            st.session_state.answers[i]
+            if i < len(
                 st.session_state.answers
             )
-            else "[No answer]"
-        )
-
-        score = evaluation.get(
-            "score",
-            0,
+            else ""
         )
 
         with st.expander(
-            f"Question {index + 1} — Score: {score}/10"
+            f"Question {i + 1} — "
+            f"{evaluation.get('score', 0)}/10"
         ):
 
             st.markdown(
@@ -2229,50 +1874,34 @@ def show_results():
             )
 
             st.write(
-                "Correctness:",
-                f"{evaluation.get('correctness', 0)}/10",
+                f"Correctness: "
+                f"{evaluation.get('correctness', 0)}/10"
             )
 
             st.write(
-                "Relevance:",
-                f"{evaluation.get('relevance', 0)}/10",
+                f"Technical Knowledge: "
+                f"{evaluation.get('technical_knowledge', 0)}/10"
             )
 
             st.write(
-                "Technical Knowledge:",
-                f"{evaluation.get('technical_knowledge', 0)}/10",
+                f"Communication: "
+                f"{evaluation.get('communication', 0)}/10"
             )
 
-            st.write(
-                "Communication:",
-                f"{evaluation.get('communication', 0)}/10",
-            )
-
-            st.write(
-                "Confidence:",
-                f"{evaluation.get('confidence', 0)}/10",
-            )
-
-            better_answer = evaluation.get(
+            better = evaluation.get(
                 "better_answer",
-                "",
+                ""
             )
 
-            if better_answer:
+            if better:
 
                 st.markdown(
                     "**✨ Better Answer:**"
                 )
 
-                st.write(
-                    better_answer
-                )
+                st.write(better)
 
-    # --------------------------------------------------------
-    # ACTIONS
-    # --------------------------------------------------------
-
-    st.markdown("---")
+    st.divider()
 
     col1, col2 = st.columns(2)
 
@@ -2280,28 +1909,23 @@ def show_results():
 
         if st.button(
             "🔄 Start New Interview",
-            use_container_width=True,
+            use_container_width=True
         ):
 
             reset_interview()
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
+            st.session_state.page = "Interview Setup"
 
             st.rerun()
 
     with col2:
 
         if st.button(
-            "🏠 Back to Dashboard",
-            use_container_width=True,
+            "🏠 Back Home",
+            use_container_width=True
         ):
 
-            st.session_state.page = (
-                "Dashboard"
-            )
-
+            st.session_state.page = "Home"
             st.rerun()
 
 
@@ -2311,78 +1935,56 @@ def show_results():
 
 def show_history():
 
-    st.title(
-        "📚 Interview History"
-    )
+    st.title("📚 Interview History")
 
-    history = st.session_state.history
-
-    if not history:
+    if not st.session_state.history:
 
         st.info(
-            "You have not completed any interviews yet."
+            "No completed interviews yet."
         )
 
         if st.button(
             "🚀 Start Your First Interview",
-            use_container_width=True,
+            use_container_width=True
         ):
 
-            st.session_state.page = (
-                "Interview Setup"
-            )
-
+            st.session_state.page = "Interview Setup"
             st.rerun()
 
         return
 
-    for index, item in enumerate(
-        reversed(history),
-        start=1,
+    for i, interview in enumerate(
+        reversed(
+            st.session_state.history
+        ),
+        1
     ):
 
         with st.expander(
-            f"Interview {index} — "
-            f"{item.get('role', 'Unknown Role')} — "
-            f"{item.get('score', 0)}/100"
+            f"Interview {i} • "
+            f"{interview.get('role')} • "
+            f"{interview.get('score')}/100"
         ):
 
-            col1, col2, col3 = st.columns(3)
+            st.write(
+                "**Role:**",
+                interview.get("role")
+            )
 
-            with col1:
+            st.write(
+                "**Type:**",
+                interview.get("type")
+            )
 
-                st.write(
-                    "**Role:**",
-                    item.get(
-                        "role",
-                        "Unknown",
-                    ),
-                )
-
-            with col2:
-
-                st.write(
-                    "**Type:**",
-                    item.get(
-                        "type",
-                        "Unknown",
-                    ),
-                )
-
-            with col3:
-
-                st.write(
-                    "**Difficulty:**",
-                    item.get(
-                        "difficulty",
-                        "Unknown",
-                    ),
-                )
+            st.write(
+                "**Difficulty:**",
+                interview.get("difficulty")
+            )
 
             st.progress(
-                item.get(
+                interview.get(
                     "score",
-                    0,
+                    0
                 ) / 100
             )
 
@@ -2393,110 +1995,75 @@ def show_history():
 
 def show_about():
 
-    st.title(
-        "ℹ️ About AI Interview Simulator"
-    )
+    st.title("ℹ️ About")
 
     st.markdown(
         """
-        <div class="custom-card">
+        ### 🤖 AI Interview Simulator
 
-            <div class="card-title">
-                🤖 AI Interview Simulator
-            </div>
+        AI Interview Simulator is a portfolio-ready
+        AI application designed to help students and
+        job seekers practice interviews.
 
-            <div class="card-text">
+        ### 🛠️ Technology
 
-                AI Interview Simulator is an AI-powered
-                mock interview platform designed to help
-                students and job seekers practice interviews.
+        - Python
+        - Streamlit
+        - Groq API
+        - PyPDF2
+        - GitHub
+        - Streamlit Cloud
 
-                <br><br>
+        ### ✨ Features
 
-                <b>Technology Stack</b>
+        - AI-generated interview questions
+        - Technical interviews
+        - HR interviews
+        - Behavioral interviews
+        - Multiple difficulty levels
+        - AI answer evaluation
+        - Performance scoring
+        - Resume-based interview questions
+        - Strength analysis
+        - Improvement suggestions
+        - Interview history
 
-                <br><br>
+        ### 🚀 Future Features
 
-                🐍 Python<br>
-                🎨 Streamlit<br>
-                🧠 Groq API<br>
-                📄 PyPDF2<br>
-                ☁️ Streamlit Cloud<br>
-                🐙 GitHub
-
-                <br><br>
-
-                <b>Core Features</b>
-
-                <br><br>
-
-                • Personalized AI interview questions<br>
-                • Technical, HR and behavioral interviews<br>
-                • Multiple difficulty levels<br>
-                • AI answer evaluation<br>
-                • Performance scoring<br>
-                • Strength and weakness analysis<br>
-                • Better answer suggestions<br>
-                • Resume-based questions<br>
-                • Interview history
-
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
+        - Voice interview
+        - Video interview
+        - Downloadable reports
+        - Performance charts
+        - More AI models
+        - Multi-language support
+        """
     )
-
-    st.markdown(
-        "### 🚀 Future Improvements"
-    )
-
-    future_items = [
-        "🎤 Voice-based interviews",
-        "📹 Video interview simulation",
-        "📄 Advanced resume analysis",
-        "📊 Performance charts",
-        "🏆 Interview leaderboard",
-        "💬 Follow-up interview questions",
-        "📥 Downloadable interview reports",
-        "🌍 Multi-language interviews",
-    ]
-
-    for item in future_items:
-
-        st.markdown(
-            f"• {item}"
-        )
 
 
 # ============================================================
-# PAGE ROUTING
+# PAGE ROUTER
 # ============================================================
 
 show_sidebar()
 
-if st.session_state.page == "Dashboard":
+page = st.session_state.page
 
-    show_dashboard()
+if page == "Home":
+    show_home()
 
-elif st.session_state.page == "Interview Setup":
-
+elif page == "Interview Setup":
     show_interview_setup()
 
-elif st.session_state.page == "Mock Interview":
-
+elif page == "Mock Interview":
     show_mock_interview()
 
-elif st.session_state.page == "Results":
-
+elif page == "Results":
     show_results()
 
-elif st.session_state.page == "Interview History":
-
+elif page == "History":
     show_history()
 
-elif st.session_state.page == "About":
-
+elif page == "About":
     show_about()
 
 
@@ -2509,14 +2076,12 @@ st.markdown(
     <div class="footer">
 
         🤖 AI Interview Simulator
-        &nbsp; • &nbsp;
-        Built with Python, Streamlit & Groq
-
         <br>
-
+        Built with Python • Streamlit • Groq AI
+        <br>
         Practice. Improve. Get Interview-Ready. 🚀
 
     </div>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
